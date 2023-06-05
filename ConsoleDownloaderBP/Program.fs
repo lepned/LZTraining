@@ -18,6 +18,6 @@ let spec =
 
 //startDownloadSessionAsync spec |> Async.RunSynchronously
 
-downloadAllFilesInChunks spec |> Async.RunSynchronously
+//downloadAllFilesInChunks spec |> Async.RunSynchronously
 
 printfn "Press any key to exit..."
