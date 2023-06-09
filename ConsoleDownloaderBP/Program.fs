@@ -1,23 +1,40 @@
 ﻿open System
+open System.IO
 open System.Threading
 open LC0Training.GamesDownloader
-open System.Net.Http
 
-let spec =
+
+let plan =  
   {
-    StartDate = DateTime(2022,12,01)
-    Duration = TimeSpan.FromDays 1
+    StartDate = DateTime(2022,12,1)
+    Duration = TimeSpan.FromDays 31
     Url = "https://storage.lczero.org/files/training_data/test80"
-    TargetDir= "C:/Dev/Chess/TrainingData"
-    MaxDownloads = 25
+    TargetDir= "D:/LZGames/T80"
+    MaxDownloads = 10 // max number of downloads is limited to 10
     AutomaticRetries = true
-    HttpClient = new HttpClient()
-    Semaphore = new SemaphoreSlim(25)
     CTS = new CancellationTokenSource()
   }
 
-//startDownloadSessionAsync spec |> Async.RunSynchronously
+let passed = createVerificationSummary plan
+if passed then 
+  printfn "Verification passed" 
+else 
+  printfn "Verification failed - look at your bin dir for summary"
 
-//downloadAllFilesInChunks spec |> Async.RunSynchronously
+if not passed then
+  let failedFiles = collectAllFilesThatFailedSizeVerification plan |> Async.RunSynchronously
+  printfn "Number of files that need to be downloaded=%d" failedFiles.Length
+  for file in failedFiles do
+    let msg = sprintf "File: %s Expected=%d OnDisk=%d" file.TargetFileName file.ExpectedSize file.CurrentSize
+    printfn "%s" msg
 
-printfn "Press any key to exit..."
+let filesChecked = async {  
+    do! downloadAllFilesInChunks plan
+    do! downloadAllVerifiedFailedFilesInChunks plan 
+    return "Done with download verification loop"
+    }
+
+//let resultMessage = filesChecked |> Async.RunSynchronously
+
+printfn "Press a key to continue"
+let n = Console.ReadLine()
