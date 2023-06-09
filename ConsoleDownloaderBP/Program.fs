@@ -15,7 +15,7 @@ let plan =
     CTS = new CancellationTokenSource()
   }
 
-let passed = createVerificationSummary plan
+let passed = createVerificationSummary plan None //(Some "Dec22.txt")
 if passed then 
   printfn "Verification passed" 
 else 

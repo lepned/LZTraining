@@ -11,14 +11,6 @@ open System.Text.RegularExpressions
 open System.Net.Http.Headers
 
 module GamesDownloader =
-
-    type DownloadStatus =
-      { Line: int
-        Progress: float
-        Message : string }
-      with
-        static member Empty = {Line= 0; Progress= 0.0; Message = ""}
-
     
     type DownloadedFile = { FileURL : string; TargetFileName : string; ExpectedSize : int64; CurrentSize: int64; Desc: string }
       with
@@ -36,13 +28,6 @@ module GamesDownloader =
       }
     
     let consoleLock = obj()
-
-    //Console.SetWindowSize(100,200)
-    // Initialize console buffer
-    //Console.WindowHeight <- 500
-    //Console.BufferHeight <- 501
-    //Console.WindowWidth <- 400
-    //Console.BufferWidth <- 400
 
     // Keep track of the last line written
     let mutable lastLineWritten = 0
@@ -101,30 +86,6 @@ module GamesDownloader =
       let percentage = float totalBytesRead / float contentLength * 100.0
       printfn "Downloaded %A%%" percentage
 
-    let downloadFileAsync (url:string) fileName =
-      let httpClient = new HttpClient()
-      let start = Stopwatch.GetTimestamp()
-      async {
-          let! response = httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead) |> Async.AwaitTask
-          //let contentLength = response.Content.Headers.ContentLength.Value
-          use fileStream = new FileStream(fileName, FileMode.Create)
-          use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
-          let buffer = Array.zeroCreate<byte> 8192 
-          let mutable bytesRead = 0
-          let mutable finished = false
-          let mutable totalBytesRead = 0L
-          while not finished do
-            let bytesRead = contentStream.Read (buffer, 0, buffer.Length)
-            if bytesRead = 0 then 
-              finished <- true
-            else
-              fileStream.Write (buffer, 0, bytesRead)
-              totalBytesRead <- totalBytesRead + int64 bytesRead
-            let dur = Stopwatch.GetElapsedTime start
-            printf "\rDownloaded %d bytes in %f ms             " totalBytesRead dur.TotalSeconds
-      }
-
-
     let downloadMainFileAsync (url:string) = async {
       try 
         use client =  new HttpClient()
@@ -178,6 +139,7 @@ module GamesDownloader =
         if response.IsSuccessStatusCode then
           if not totalBytes.HasValue then           
             failwith $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"
+          
           // Get the http response content stream asynchronously 
           use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
 
@@ -188,13 +150,11 @@ module GamesDownloader =
             else 
               File.Create(downloadFile.TargetFileName)
 
-          let fileInfo = new FileInfo(downloadFile.TargetFileName)
-          // Copy the content stream to the file stream asynchronously 
+          let fileInfo = new FileInfo(downloadFile.TargetFileName)          
           let buffer = Array.zeroCreate<byte> 2048 
           let mutable finished = false
           let bytesSofar = if fileInfo.Exists then fileInfo.Length else 0L
           let mutable totalBytesRead = bytesSofar
-          //synchronizedOnLineWrite line "file update coming...."
           let totalSize = formatFileSize downloadFile.ExpectedSize
           let mutable updateCounter = 0
           
@@ -262,11 +222,11 @@ module GamesDownloader =
                   return [||]
       }
     
-    let createVerificationSummary plan =
-      //let d = plan.StartDate
+    let createVerificationSummary plan (name:string option) =      
       let periodStart = plan.StartDate.ToString("yyyyMMdd")
       let periodEnd = (plan.StartDate + plan.Duration).ToString("yyyyMMdd")
       let fileName = sprintf "File_summary_From_%s_To_%s" periodStart periodEnd
+      let fileName = defaultArg name fileName
       let files = getFileUrlAndTargetFnList plan |> Async.RunSynchronously
       let sb = System.Text.StringBuilder()
       sb.AppendLine (sprintf "Number of files=%d\n" files.Length) |> ignore
@@ -288,7 +248,7 @@ module GamesDownloader =
         File.WriteAllText(path, sb.ToString())      
       passed
 
-    let getFileSizeFromHeaderAsyncFromAllFiles (plan : DownloadPlan) = async {
+    let getFileSizeFromResponsHeaderAsyncForAllFiles (plan : DownloadPlan) = async {
       try 
         let! filesToDownload = getFileUrlAndTargetFnList plan        
         // Loop through the file URLs
@@ -312,8 +272,7 @@ module GamesDownloader =
           let failedFile = { downloadFile with CurrentSize = fileInfo.Length; Desc = desc }
           Some failedFile
       else 
-        Some downloadFile
-    
+        Some downloadFile    
     
     let collectAllFilesThatFailedSizeVerification (plan : DownloadPlan) = async {      
       try 
@@ -324,10 +283,10 @@ module GamesDownloader =
           |> Array.choose id
         return filtered
       finally () }
-        //threadSafeWrite (lastLineWritten + 1) "Done with verifing files"
-        
+
    
     let downloadAllFilesInChunks (plan:DownloadPlan) =
+        System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
           let! filesToFetch = getFileUrlAndTargetFnList plan
@@ -342,9 +301,9 @@ module GamesDownloader =
             
           try
             try
-              // create chunks of download tasks
               let struct (_,top) = Console.GetCursorPosition()          
               let mutable lineNr = top
+              // create chunks of download tasks
               let chunks = filesToDownload |> Seq.chunkBySize (Math.Min(plan.MaxDownloads,10))
               for chunk in chunks do
                 let sessionStart = Stopwatch.GetTimestamp()
@@ -370,7 +329,6 @@ module GamesDownloader =
               let ts = Stopwatch.GetElapsedTime(start)
               let msg = sprintf "Downloaded %d all files in %f minutes and %d seconds" (filesToDownload.Length) ts.TotalMinutes ts.Seconds
               threadSafeWrite (lastLineWritten + 1) msg
-              //printfn "%s" msg
 
             with 
             | :? OperationCanceledException ->
