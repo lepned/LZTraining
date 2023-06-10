@@ -26,7 +26,7 @@ The configuration plan is used by the application to define the above settings. 
 After running the program, there are currently three options: downloading missing files by pressing the 'C' key, verifying downloaded files by pressing the 'V' key and stopping the program by pressing the 'Esc' key.
 If no arguments are provided upon running the program, then it uses the default configuration plan. If an argument is passed to the program, it is treated as a path to a JSON file containing a custom configuration plan. Upon verifying the downloaded files, there is either a message confirming the successful downloads or a summary of errors that occurred during the download. The program ends after the 'Esc' key is pressed or if there are too many arguments provided.
 
-To run the program, you will need to have .NET 7.0 or later installed. You can download it from the official .NET website. Once you have installed .NET installed, you can navigate to the directory containing the Program.fs file in your terminal and run the command dotnet run. If you want to use a custom configuration plan, you can you can pass the path to a json-file as an argument like this:
+To run the program, you will need to have .NET 7.0 or later installed. You can download it from the official .NET website. Once you have installed .NET, you can navigate to the directory containing the Program.fs file in your terminal and run the command dotnet run. If you want to use a custom configuration plan, you can you can pass the path to a json-file as an argument like this:
 
 ` dotnet run C:\path\to\config.json `
 
