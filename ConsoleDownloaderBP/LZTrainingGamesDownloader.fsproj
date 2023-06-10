@@ -6,8 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Downloadplan.json" />
     <Compile Include="Downloader.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
+
+  <ItemGroup />
 
 </Project>

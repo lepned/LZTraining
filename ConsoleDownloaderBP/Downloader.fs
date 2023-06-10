@@ -19,7 +19,7 @@ module GamesDownloader =
     type DownloadPlan = 
       {
         StartDate: DateTime
-        Duration: TimeSpan
+        DurationInDays: int
         Url: string
         TargetDir: string
         MaxDownloads: int
@@ -36,8 +36,8 @@ module GamesDownloader =
     // Create function to perform thread-safe console writing
     let threadSafeWrite (top: int) (text:string) = 
         lock consoleLock (fun () ->            
-            Console.BufferHeight <- 1000
-            Console.WindowHeight <- 100            
+            //Console.BufferHeight <- 1000
+            //Console.WindowHeight <- 100            
             Console.SetCursorPosition(0, top+scrollToPosition)
             //let wh, ww = Console.WindowHeight, Console.WindowWidth
             //let wt,wl = Console.WindowTop, Console.WindowLeft
@@ -50,11 +50,11 @@ module GamesDownloader =
             // Update the last line written
             if top > lastLineWritten then
               lastLineWritten <- top
-            if Console.WindowHeight > lastLineWritten then
+            //if Console.WindowHeight > lastLineWritten then
             //  Console.WindowHeight <- lastLineWritten + 10
             //  Console.BufferHeight <- Console.WindowHeight + 1
             // Move the cursor to the line below the last line written            
-              Console.CursorTop <- lastLineWritten 
+            Console.CursorTop <- lastLineWritten 
         )
 
 
@@ -195,9 +195,9 @@ module GamesDownloader =
       let file = { FileURL = fileURL; TargetFileName = targetFN; ExpectedSize = size; CurrentSize = 0; Desc = ""  }
       file
 
-    let createDateMatchStringList spec =
-      let startDate = spec.StartDate
-      let endDate = startDate + spec.Duration
+    let createDateMatchStringList plan =
+      let startDate = plan.StartDate
+      let endDate = startDate + TimeSpan.FromDays(plan.DurationInDays)
       let days = (endDate - startDate).Days
       [ for d in 0..days-1 -> startDate.AddDays(float d).ToString("yyyyMMdd") ]
     
@@ -225,7 +225,7 @@ module GamesDownloader =
     
     let createVerificationSummary plan (name:string option) =      
       let periodStart = plan.StartDate.ToString("yyyyMMdd")
-      let periodEnd = (plan.StartDate + plan.Duration).ToString("yyyyMMdd")
+      let periodEnd = (plan.StartDate + TimeSpan.FromDays(plan.DurationInDays)).ToString("yyyyMMdd")
       let fileName = sprintf "File_summary_From_%s_To_%s" periodStart periodEnd
       let fileName = defaultArg name fileName
       let files = getFileUrlAndTargetFnList plan |> Async.RunSynchronously
@@ -272,7 +272,7 @@ module GamesDownloader =
           let failedFile = { downloadFile with CurrentSize = fileInfo.Length; Desc = desc }
           Some failedFile
       else 
-        Some downloadFile    
+        None    
     
     let collectAllFilesThatNeedToBeResumed (plan : DownloadPlan) = async {      
       try 
@@ -298,10 +298,8 @@ module GamesDownloader =
         System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
-          let! filesToFetch = getFileUrlAndTargetFnList plan
-          let filesToDownload = 
-            filesToFetch 
-            |> Array.filter(fun file -> not (File.Exists file.TargetFileName))           
+          //let! filesToFetch = getFileUrlAndTargetFnList plan
+          let filesToDownload = newFiles           
 
           if plan.MaxDownloads < filesToDownload.Length then
              threadSafeWrite (lastLineWritten + 1) $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
