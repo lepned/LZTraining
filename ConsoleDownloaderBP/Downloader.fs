@@ -93,6 +93,7 @@ module GamesDownloader =
         
         // Check if the response is successful 
         if response.IsSuccessStatusCode then
+          
           // Get the http response content stream asynchronously 
           use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
 
@@ -171,8 +172,8 @@ module GamesDownloader =
             updateCounter <- updateCounter + 1
             let bytesRead = contentStream.Read (buffer, 0, buffer.Length)
             if bytesRead = 0 then 
-              finished <- true
               writeProgress()
+              finished <- true
             else
               fileStream.Write (buffer, 0, bytesRead)
               totalBytesRead <- totalBytesRead + int64 bytesRead
@@ -250,8 +251,7 @@ module GamesDownloader =
 
     let getFileSizeFromResponsHeaderAsyncForAllFiles (plan : DownloadPlan) = async {
       try 
-        let! filesToDownload = getFileUrlAndTargetFnList plan        
-        // Loop through the file URLs
+        let! filesToDownload = getFileUrlAndTargetFnList plan                
         use client =  new HttpClient()
         for file in filesToDownload do         
           use! response = client.GetAsync(file.FileURL, HttpCompletionOption.ResponseHeadersRead) |> Async.AwaitTask
@@ -274,7 +274,7 @@ module GamesDownloader =
       else 
         Some downloadFile    
     
-    let collectAllFilesThatFailedSizeVerification (plan : DownloadPlan) = async {      
+    let collectAllFilesThatNeedToBeResumed (plan : DownloadPlan) = async {      
       try 
         let! filesToDownload = getFileUrlAndTargetFnList plan 
         let filtered = 
@@ -284,8 +284,17 @@ module GamesDownloader =
         return filtered
       finally () }
 
+    let collectAllNewFiles (plan : DownloadPlan) = async {      
+      try 
+        let! filesToDownload = getFileUrlAndTargetFnList plan 
+        let filtered = 
+          filesToDownload 
+          |> Array.filter(fun file -> not (File.Exists file.TargetFileName))
+        return filtered
+      finally () }
+
    
-    let downloadAllFilesInChunks (plan:DownloadPlan) =
+    let downloadNewFilesInChunks (newFiles: DownloadedFile array) (plan:DownloadPlan) =
         System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
@@ -341,11 +350,11 @@ module GamesDownloader =
             plan.CTS.Dispose()
         }
 
-    let downloadAllVerifiedFailedFilesInChunks (plan:DownloadPlan) =
+    let downloadResumedFilesInChunks (resumedFiles: DownloadedFile array) (plan:DownloadPlan) =
         System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
-          let! filesToDownload = collectAllFilesThatFailedSizeVerification plan  
+          let filesToDownload = resumedFiles  
           if filesToDownload.Length > 0 then
 
             if plan.MaxDownloads < filesToDownload.Length then
