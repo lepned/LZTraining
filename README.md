@@ -24,7 +24,7 @@ If no arguments are provided upon running the program, then it uses the default 
 
 You can use dotnet run to start the program from the terminal and you can pass the path to a json-file as an argument like this:
 
-' dotnet run C:\path\to\config.json '
+` dotnet run C:\path\to\config.json `
 
 
 
