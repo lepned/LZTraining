@@ -1,5 +1,5 @@
 # LZTraining
-Download training data from LC0
+Download training data from Leela Chess Zero
 
 This is a console-based application for downloading training data from storage.lczero.org. 
 
