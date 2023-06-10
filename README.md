@@ -22,7 +22,7 @@ In the startup code, there is a defaultPlan variable that defines these settings
 After running the program, there are currently three options: downloading missing files by pressing the 'C' key, verifying downloaded files by pressing the 'V' key and stopping the program by pressing the 'Esc' key.
 If no arguments are provided upon running the program, then it uses the default configuration plan. If an argument is passed to the program, it is treated as a path to a JSON file containing a custom configuration plan. Upon verifying the downloaded files, there is either a message confirming the successful downloads or a summary of errors that occurred during the download. The program ends after the 'Esc' key is pressed or if there are too many arguments provided.
 
-You can use dotnet run to start the program from the terminal and you can pass the path to a json-file as an argument like this:
+To run the program, you will need to have .NET 7.0 or later installed. You can download it from the official .NET website. Once you have installed .NET installed, you can navigate to the directory containing the Program.fs file in your terminal and run the command dotnet run command. If you want to use a custom configuration plan, you can you can pass the path to a json-file as an argument like this:
 
 ` dotnet run C:\path\to\config.json `
 
