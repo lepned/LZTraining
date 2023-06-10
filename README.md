@@ -4,6 +4,7 @@ Download training data from LC0
 This is a console-based application for downloading training data from storage.lczero.org. 
 
 The configuration/download plan is defined in a json-file like this:
+```
 {
   "StartDate": "2022-11-01",
   "DurationInDays": 5,
@@ -13,7 +14,7 @@ The configuration/download plan is defined in a json-file like this:
   "AutomaticRetries": true,
   "AllowToDeleteFailedFiles": false
 }
-
+```
 The configuration plan is used by the application to define the above settings. Once the configuration plan is set up, it can be used to download the training data.
 
 In the startup code, there is a defaultPlan variable that defines these settings, which is then used by startProgram as the default configuration plan. If any arguments are provided upon running the program, the program reads these from a JSON file.
