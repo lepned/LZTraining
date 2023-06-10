@@ -4,7 +4,7 @@
   "Url": "https://storage.lczero.org/files/training_data/test80",
   "TargetDir": "E:/LZGames/T80",
   "MaxDownloads": 10,
-  "AllowToDeleteFailedFiles": true,
+  "AllowToDeleteFailedFiles": false,
   "AutomaticRetries": true
 }
 

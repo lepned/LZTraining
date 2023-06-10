@@ -4,6 +4,7 @@ open System.Threading
 open LC0Training.GamesDownloader
 open System.Text.Json
 
+//Download training data from LC0
 
 let defaultPlan =  
   {
@@ -13,7 +14,7 @@ let defaultPlan =
     TargetDir= "E:/LZGames/T80"
     MaxDownloads = 10 // max number of downloads is limited to 10
     AutomaticRetries = true
-    AllowToDeleteFailedFiles = true
+    AllowToDeleteFailedFiles = false
     CTS = new CancellationTokenSource()
   }
 
