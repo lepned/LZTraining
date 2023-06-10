@@ -5,13 +5,26 @@ open LC0Training.GamesDownloader
 open System.Text.Json
 
 
+
+//Console.Clear()
+//for i = 0 to 100 do
+  //Console.BufferWidth <- 1000 //Console.WindowWidth + 5
+  //Console.BufferHeight <- 1000 //Console.WindowHeight + 1000
+  //Console.SetWindowPosition(0,0)
+  //let maxCursorValue = min (Console.WindowHeight - 1) Console.CursorTop
+  //Console.SetCursorPosition(0,maxCursorValue)
+  //printConsoleValues()
+  //printfn "Processing number %d" i
+  //printConsoleValues()
+  //printfn ""
+
 let defaultPlan =  
   {
     StartDate = DateTime(2022,11,1)
     DurationInDays = 1
     Url = "https://storage.lczero.org/files/training_data/test80"
     TargetDir= "E:/LZGames/T80"
-    MaxDownloads = 10 // max number of downloads is limited to 10
+    MaxDownloads = 2 // max number of downloads is limited to 10
     AutomaticRetries = true
     CTS = new CancellationTokenSource()
   }
@@ -36,20 +49,16 @@ let verify plan =
       printfn "%s" msg
 
 
-let downloadVerificationLoop plan =  
-  Console.BufferHeight <- 2000
-  Console.WindowHeight <- 100
+let downloadVerificationLoop plan =    
   let rec loop () = async { 
-
+    
     let! resumedFiles = collectAllFilesThatNeedToBeResumed plan
     let! newFiles = collectAllNewFiles plan
     let sum = resumedFiles.Length + newFiles.Length
     printfn "Total number of files to download = %d" sum
     if sum = 0 then
       return true
-    else
-      if lastLineWritten <> Console.CursorTop then
-        lastLineWritten <- Console.CursorTop
+    else        
       do! downloadResumedFilesInChunks resumedFiles plan 
       do! downloadNewFilesInChunks newFiles plan
       return! loop () }
@@ -93,6 +102,7 @@ let main args =
     let planFromFile =
       if fileInfo.Exists then
         let jsonPlan = readDownloadPlan one
+        let jsonPlan = {jsonPlan with CTS = new CancellationTokenSource() }
         startProgram jsonPlan
       else
         startProgram defaultPlan

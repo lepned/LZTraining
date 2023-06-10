@@ -31,37 +31,44 @@ module GamesDownloader =
 
     // Keep track of the last line written
     let mutable lastLineWritten = 0
-    let mutable scrollToPosition = 0
+    
+    let writeEmptyLine() =
+      Console.WriteLine(new string(' ', Console.WindowWidth - 1))
+    
+    let printConsoleValues() =
+      let ct = Console.CursorTop
+      let cl = Console.CursorLeft
+      let wh = Console.WindowHeight
+      let ww = Console.WindowWidth
+      let wt = Console.WindowTop
+      let wl = Console.WindowLeft
+      let bh = Console.BufferHeight
+      let bw = Console.BufferWidth
+      let struct (w,t) = Console.GetCursorPosition()
+      let lh = Console.LargestWindowHeight
+      let lw = Console.LargestWindowWidth
+      printfn "Window: wh=%d ww=%d wt=%d wl=%d, buffer: bh=%d bw=%d, Cursor: cl=%d ct=%d, cursorPos: w=%d t=%d, Largest: lh=%d lw=%d" wh ww wt wl bh bw cl ct w t lh lw
 
     // Create function to perform thread-safe console writing
     let threadSafeWrite (top: int) (text:string) = 
         lock consoleLock (fun () ->            
-            //Console.BufferHeight <- 1000
-            //Console.WindowHeight <- 100            
-            Console.SetCursorPosition(0, top+scrollToPosition)
-            //let wh, ww = Console.WindowHeight, Console.WindowWidth
-            //let wt,wl = Console.WindowTop, Console.WindowLeft
-            //let bh,bw = Console.BufferHeight, Console.BufferWidth
-            //let ct,cl = Console.CursorTop, Console.CursorLeft
-            //let debug = sprintf " - wh=%d ww=%d wt=%d wl=%d bh=%d bw=%d ct=%d cl=%d" wh ww wt wl bh bw ct cl 
-            if Console.WindowHeight >= lastLineWritten then
-              Console.Write (text)
-
-            // Update the last line written
-            if top > lastLineWritten then
-              lastLineWritten <- top
-            //if Console.WindowHeight > lastLineWritten then
-            //  Console.WindowHeight <- lastLineWritten + 10
-            //  Console.BufferHeight <- Console.WindowHeight + 1
-            // Move the cursor to the line below the last line written            
-            Console.CursorTop <- lastLineWritten 
+          let struct (_,t) = Console.GetCursorPosition()
+          Console.BufferWidth <- 1000
+          Console.BufferHeight <- 1000
+          Console.SetCursorPosition(0, top)
+          Console.Write (text)
+            
+          // Update the last line written
+          if top > lastLineWritten then
+            lastLineWritten <- top
+          Console.CursorTop <- t
+          Console.CursorLeft <- 0
         )
 
 
     let getFileSize text =
       let pattern = @"\s(\d+)$" // pattern for one or more digits at the end of the string
       let test = Regex.Match(text, pattern)
-
       if test.Success then
           let numberString = test.Groups.[1].Value // get the first group
           let number = int64 numberString // convert the string to an integer
@@ -132,9 +139,10 @@ module GamesDownloader =
         let sizeOnDisk = if fileInfo.Exists then fileInfo.Length else 0
         let sum = sizeLeftToDownload + sizeOnDisk
         if downloadFile.ExpectedSize <> sum then
-          let! size = getFileSizeFromUrl client downloadFile        
-          if size = downloadFile.ExpectedSize then
-            failwith $"Something wrong with the file {downloadFile.TargetFileName} - consider deleting the file and rerun"
+          if sizeOnDisk > downloadFile.ExpectedSize then
+            let! size = getFileSizeFromUrl client downloadFile        
+            if sizeOnDisk > size then          
+              failwith $"Something wrong with the file {downloadFile.TargetFileName} - consider deleting the file and rerun"
         
         // Check if the response is successful 
         if response.IsSuccessStatusCode then
@@ -298,27 +306,27 @@ module GamesDownloader =
         System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
-          //let! filesToFetch = getFileUrlAndTargetFnList plan
           let filesToDownload = newFiles           
-
           if plan.MaxDownloads < filesToDownload.Length then
-             threadSafeWrite (lastLineWritten + 1) $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
+             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
           else
-            threadSafeWrite (lastLineWritten + 1) $"Got {filesToDownload.Length} files to download for the specified period";
+            Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period";
             
           try
             try
-              let struct (_,top) = Console.GetCursorPosition()          
-              let mutable lineNr = top
+              if Console.CursorTop > lastLineWritten then
+                lastLineWritten <- Console.CursorTop                
+              let limit = Math.Min(plan.MaxDownloads,10)
               // create chunks of download tasks
-              let chunks = filesToDownload |> Seq.chunkBySize (Math.Min(plan.MaxDownloads,10))
+              let chunks = filesToDownload |> Seq.chunkBySize limit
               for chunk in chunks do
                 let sessionStart = Stopwatch.GetTimestamp()
-                let mutable lineNr = lastLineWritten + 2 
                 let msg = sprintf "Downloading a chunk of %d files at a time" (chunk |> Seq.length)                  
-                threadSafeWrite lineNr msg                
+                Console.WriteLine msg                
+                let mutable lineNr = lastLineWritten + 2 
                 let downloadTasks = List<Async<DownloadedFile>>()
                 for downloadFile in chunk do
+                  writeEmptyLine()
                   lineNr <- lineNr + 1
                   let downloadTask = downloadFileTaskAsyncWithProgress lineNr downloadFile plan                  
                   downloadTasks.Add(downloadTask)
@@ -327,11 +335,11 @@ module GamesDownloader =
                 let! _ =
                     downloadTasks 
                     |> Async.Parallel
-
+                
                 let ts = Stopwatch.GetElapsedTime(sessionStart)
                 let msg = sprintf "Downloaded %d files (in chunk) %.1f minutes and %d seconds" (chunk |> Seq.length) ts.TotalMinutes ts.Seconds
                 threadSafeWrite (lastLineWritten + 1) msg
-                Console.SetWindowPosition(0, lastLineWritten)
+                //Console.SetWindowPosition(0, lastLineWritten)
               
               let ts = Stopwatch.GetElapsedTime(start)
               let msg = sprintf "Downloaded %d all files in %f minutes and %d seconds" (filesToDownload.Length) ts.TotalMinutes ts.Seconds
@@ -340,62 +348,62 @@ module GamesDownloader =
             with 
             | :? OperationCanceledException ->
               // Handle the cancellation exception
-              printfn "Download cancelled."
+              Console.WriteLine "Download cancelled."
             | ex ->
               // Handle any other exception
-              printfn "Download failed: %s" ex.Message
+              Console.WriteLine $"Download failed: {ex.Message}" 
           finally
             plan.CTS.Dispose()
         }
 
     let downloadResumedFilesInChunks (resumedFiles: DownloadedFile array) (plan:DownloadPlan) =
-        System.Console.CursorVisible <- false
+        //System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
           let filesToDownload = resumedFiles  
-          if filesToDownload.Length > 0 then
-
+          if filesToDownload.Length > 0 then            
             if plan.MaxDownloads < filesToDownload.Length then
-              threadSafeWrite (lastLineWritten + 1) $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
+              Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
             else
-              threadSafeWrite (lastLineWritten + 1) $"Got {filesToDownload.Length} files to download for the specified period";           
+              Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period";           
             
             try
               try
-                
-                // create chunks of download tasks
+                if Console.CursorTop > lastLineWritten then
+                  lastLineWritten <- Console.CursorTop
+                  
                 let chunks = filesToDownload |> Seq.chunkBySize (Math.Min(plan.MaxDownloads,10))
                 for chunk in chunks do 
                   let sessionStart = Stopwatch.GetTimestamp()
-                  let mutable lineNr = lastLineWritten + 2 
                   let msg = sprintf "Downloading a chunk of %d files at a time" (chunk |> Seq.length)                  
-                  threadSafeWrite lineNr msg
+                  Console.WriteLine msg
+                  let mutable lineNr = lastLineWritten + 2                 
                   let downloadTasks = List<Async<DownloadedFile>>()
                   for downloadFile in chunk do
+                    writeEmptyLine()
                     lineNr <- lineNr + 1
                     // Create a download task for each file URL
                     let downloadTask = downloadFileTaskAsyncWithProgress lineNr downloadFile plan                   
                     downloadTasks.Add(downloadTask)
                   let! _ =
                     downloadTasks 
-                    |> Async.Parallel 
-                    
-                  Console.SetWindowPosition(0, lastLineWritten)
+                    |> Async.Parallel                     
+                 
+                  lineNr <- lineNr + 1
                   let ts = Stopwatch.GetElapsedTime(sessionStart)
                   let msg = sprintf "Downloaded %d files (in chunk) %f minutes and %d seconds" (chunk |> Seq.length) ts.TotalMinutes ts.Seconds
-                  lineNr <- lineNr + 1
-                  threadSafeWrite lineNr msg
+                  Console.WriteLine msg
               
                 let ts = Stopwatch.GetElapsedTime(start)
                 let msg = sprintf "Downloaded %d all files in %f minutes and %d seconds" (filesToDownload.Length) ts.TotalMinutes ts.Seconds                
-                threadSafeWrite (lastLineWritten + 1) msg
+                Console.WriteLine msg
               with 
               | :? OperationCanceledException ->
                 // Handle the cancellation exception                
-                printfn "Download cancelled."
+                Console.WriteLine "Download cancelled."
               | ex ->
                 // Handle any other exception
-                printfn "Download failed: %s" ex.Message
+                Console.WriteLine $"Download failed: {ex.Message}"
             finally
               plan.CTS.Dispose()
         }
