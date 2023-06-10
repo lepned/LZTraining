@@ -10,8 +10,8 @@ The DownloadPlan class has the following properties:
 •	DurationInDays: This represents the duration in days for collecting files to be downloaded.
 •	Url: This represents the URL of the resource to be downloaded. This is fixed and should not be changed.
 •	TargetDir: This represents the target directory where the downloaded files will be saved on your computer.
-•	MaxDownloads: This represents the maximum number of downloads allowed in parallel (limit is set to  maximum 10 concurrent downloads).
-•	AutomaticRetries: This represents a boolean value indicating whether or not failed downloads should be retried automatically.
+•	MaxDownloads: This represents the maximum number of concurrent downloads (max limit is set to 10).
+•	AutomaticRetries: This represents a boolean value indicating whether or not failed downloads should be retried.
 •	AllowToDeleteFailedFiles: This represents a boolean value indicating whether or not failed downloads should be deleted.
 ```
 
