@@ -6,11 +6,11 @@ This is a console-based application for downloading training data from storage.l
 DownloadPlan is a model class that is used for defining the various settings needed for downloading the training data.
 The DownloadPlan class has the following properties:
 ```
-•	StartDate: This represents the start date of the downloads. It is of type DateTime.
-•	DurationInDays: This represents the duration in days for collecting files to be downloaded. It represent the timespan for the period to download.
+•	StartDate: This represents the start date of the downloads to fetch. It is of type DateTime.
+•	DurationInDays: This represents the duration in days for collecting files to be downloaded.
 •	Url: This represents the URL of the resource to be downloaded. This is fixed and should not be changed.
 •	TargetDir: This represents the target directory where the downloaded files will be saved on your computer.
-•	MaxDownloads: This represents the maximum number of downloads allowed in parallel. There is a limit of maximum 10 concurrent downloads from the server.
+•	MaxDownloads: This represents the maximum number of downloads allowed in parallel (limit is set to  maximum 10 concurrent downloads).
 •	AutomaticRetries: This represents a boolean value indicating whether or not failed downloads should be retried automatically.
 •	AllowToDeleteFailedFiles: This represents a boolean value indicating whether or not failed downloads should be deleted.
 ```
