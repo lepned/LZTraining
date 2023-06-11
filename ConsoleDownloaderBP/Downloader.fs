@@ -359,12 +359,12 @@ module GamesDownloader =
               Console.WriteLine msg
 
             with 
-            | :? OperationCanceledException ->
+            | :? OperationCanceledException as e  ->
               // Handle the cancellation exception
-              Console.WriteLine "Download cancelled."
+              failwith $"Download cancelled: {e.Message}"
             | ex ->
               // Handle any other exception
-              Console.WriteLine $"Download failed: {ex.Message}" 
+              failwith $"Download failed: {ex.Message}" 
           finally
             plan.CTS.Dispose()
         }
