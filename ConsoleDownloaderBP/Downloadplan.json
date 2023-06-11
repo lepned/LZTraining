@@ -1,10 +1,11 @@
 ﻿{
   "StartDate": "2022-11-01",
-  "DurationInDays": 2,
+  "DurationInDays": 6,
   "Url": "https://storage.lczero.org/files/training_data/test80",
   "TargetDir": "E:/LZGames/T80",
   "MaxDownloads": 10,
   "AllowToDeleteFailedFiles": false,
+  "EnableProgressUpdate": false,
   "AutomaticRetries": true
 }
 

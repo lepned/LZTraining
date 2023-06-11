@@ -9,12 +9,13 @@ open System.Text.Json
 let defaultPlan =  
   {
     StartDate = DateTime(2022,11,1)
-    DurationInDays = 5
+    DurationInDays = 6
     Url = "https://storage.lczero.org/files/training_data/test80"
     TargetDir= "E:/LZGames/T80"
-    MaxDownloads = 10 // max number of downloads is limited to 10
+    MaxDownloads = 2 // max number of downloads is limited to 10
     AutomaticRetries = true
     AllowToDeleteFailedFiles = false
+    EnableProgressUpdate = false
     CTS = new CancellationTokenSource()
   }
 
@@ -114,7 +115,6 @@ let main args =
 
   |[|arg1;arg2|] -> printfn "args: %s %s" arg1 arg2
   |_ -> printfn "Too many args provided"
-
   
     
   // Return 0 to indicate success
