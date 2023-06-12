@@ -486,7 +486,7 @@ module GamesDownloader =
         System.Console.CursorVisible <- false
         let start = Stopwatch.GetTimestamp()
         async {
-          let filesToDownload = newFiles |> Array.sortBy(fun e -> e.ExpectedSize)         
+          let filesToDownload = newFiles         
           if plan.MaxDownloads < filesToDownload.Length then
              Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
           else

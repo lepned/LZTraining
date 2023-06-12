@@ -8,11 +8,11 @@ open System.Text.Json
 
 let defaultPlan =  
   {
-    StartDate = DateTime(2022,12,1)
-    DurationInDays = 1
+    StartDate = DateTime(2022,11,1)
+    DurationInDays = 30
     Url = "https://storage.lczero.org/files/training_data/test80"
-    TargetDir= "C:\Dev\Chess\TrainingData"
-    MaxDownloads = 8 // max number of downloads is limited to 10
+    TargetDir= "E:\LZGames\T80"
+    MaxDownloads = 10 // max number of downloads is limited to 10
     AutomaticRetries = true
     AllowToDeleteFailedFiles = false
     EnableProgressUpdate = false
