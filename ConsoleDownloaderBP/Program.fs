@@ -8,11 +8,11 @@ open System.Text.Json
 
 let defaultPlan =  
   {
-    StartDate = DateTime(2022,11,1)
-    DurationInDays = 6
+    StartDate = DateTime(2022,12,1)
+    DurationInDays = 1
     Url = "https://storage.lczero.org/files/training_data/test80"
-    TargetDir= "E:/LZGames/T80"
-    MaxDownloads = 2 // max number of downloads is limited to 10
+    TargetDir= "C:\Dev\Chess\TrainingData"
+    MaxDownloads = 8 // max number of downloads is limited to 10
     AutomaticRetries = true
     AllowToDeleteFailedFiles = false
     EnableProgressUpdate = false
@@ -71,6 +71,10 @@ let readDownloadPlan path =
 
 
 let startProgram plan =
+  Console.WriteLine("\nMake sure to review the download plan before proceeding...")
+  let planDesc = sprintf "%A" plan
+  Console.WriteLine($"\nCurrent download plan in use:\n{planDesc}")
+  
   let mutable cont = true  
   while cont do
     Console.WriteLine("\nPress C key to download missing files")
@@ -98,7 +102,6 @@ let main args =
   //for debugging at the moment
   match args with
   |[||] -> 
-    Console.WriteLine("\nBe sure to define a download plan before proceeding by open program.fs to adjust plan...")    
     startProgram defaultPlan
   |[|arg1|] -> 
     Console.WriteLine($"Received args={arg1}") 
@@ -109,7 +112,6 @@ let main args =
         let jsonPlan = {jsonPlan with CTS = new CancellationTokenSource() }
         startProgram jsonPlan
       else
-        Console.WriteLine("\nBe sure to define a download plan before proceeding by open program.fs to adjust plan...")
         startProgram defaultPlan
     printfn "Received args=%s: %A" arg1 planFromFile
 
