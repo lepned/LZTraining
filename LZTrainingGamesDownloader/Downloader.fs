@@ -11,7 +11,9 @@ open System.Text.RegularExpressions
 open System.Net.Http.Headers
 
 module GamesDownloader =
-    
+    // Define a custom exception type with a string argument
+    exception FileDownloadError of string
+
     type DownloadedFile = { FileURL : string; TargetFileName : string; ExpectedSize : int64; CurrentSize: int64; Desc: string }
       with
         static member Empty = {FileURL = ""; TargetFileName = ""; ExpectedSize = 0L; CurrentSize = 0L; Desc= "Empty"}
@@ -29,6 +31,7 @@ module GamesDownloader =
         CTS: CancellationTokenSource
       }
     
+    let rnd = Random()
     let consoleLock = obj()
 
     // Keep track of the last line written
@@ -169,9 +172,13 @@ module GamesDownloader =
         use request = new HttpRequestMessage(HttpMethod.Get, downloadFile.FileURL)
         let fileInfo = new FileInfo(downloadFile.TargetFileName)
         if fileInfo.Exists then
-            if fileInfo.Length > downloadFile.ExpectedSize then
-              failwith $"{fileInfo.Name} - file size bigger than expected (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"                  
-            request.Headers.Range <- RangeHeaderValue(fileInfo.Length, Nullable())
+          if fileInfo.Length > downloadFile.ExpectedSize then
+            if plan.AllowToDeleteFailedFiles then
+              fileInfo.Delete()
+              FileDownloadError "File was oversized and got deleted - will retry download" |> raise
+            else
+              failwith $"{fileInfo.Name} - oversized file (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize}), consider to enable AllowToDeleteFailedFiles=true in download plan (json)"                  
+          request.Headers.Range <- RangeHeaderValue(fileInfo.Length, Nullable())
 
         use! response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, plan.CTS.Token) |> Async.AwaitTask
         let totalBytes = response.Content.Headers.ContentLength
@@ -181,25 +188,27 @@ module GamesDownloader =
         if downloadFile.ExpectedSize <> sum then
           if sizeOnDisk > downloadFile.ExpectedSize then
             let! size = getFileSizeFromUrl client downloadFile        
-            if sizeOnDisk > size then          
-              failwith $"Something wrong with the file {downloadFile.TargetFileName} - consider deleting the file and rerun"
+            if sizeOnDisk > size then
+              failwith $"{fileInfo.Name} - oversized file (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize}), consider to enable AllowToDeleteFailedFiles=true in download plan (json)"
         
         // Check if the response is successful 
         if response.IsSuccessStatusCode then
           if not totalBytes.HasValue then           
-            failwith $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"
+            FileDownloadError $"{fileInfo.Name} - download request returns 0 bytes from server (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})" |> raise
           
           // Get the http response content stream asynchronously 
           use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
           let msg = sprintf "%s - Download started (file size = %s) " fileInfo.Name (formatFileSize downloadFile.ExpectedSize)
           Console.WriteLine msg
+          //debugging exception handling
+          //if (rnd.Next(1,100) > 50) then
+          //  raise (FileDownloadError $"{downloadFile.TargetFileName} - I was unlucky and failed in your test")
           // Create a file stream to save the content stream 
           use fileStream = 
             if fileInfo.Exists then 
                 File.Open(downloadFile.TargetFileName, FileMode.Append) 
             else 
               File.Create(downloadFile.TargetFileName)
-
           do! contentStream.CopyToAsync(fileStream) |> Async.AwaitTask
           do! Async.Sleep 1000
           let fileHandle = new FileInfo(downloadFile.TargetFileName)
@@ -210,14 +219,21 @@ module GamesDownloader =
           let percentage = (float bytesOnDisk / float downloadFile.ExpectedSize) * 100.
           let totalSize = formatFileSize downloadFile.ExpectedSize
           let kbps = (float bytesOnDisk / 1024.) / dur.TotalSeconds
-          let msg = sprintf "%s - Downloaded %s of %s (%.2f%%) in %s kbps=%.0f          " fileHandle.Name bytesOnDiskFormatted totalSize percentage time kbps
+          let msg = sprintf "%s - Downloaded %s of %s (%.2f%%) in %s kbps=%.0f " fileHandle.Name bytesOnDiskFormatted totalSize percentage time kbps
           Console.WriteLine msg
         else
           Console.WriteLine "Download error"
         return downloadFile
       
         with
-        |_ as e -> failwith $"Download error for: {e.Message} "; return downloadFile }
+        //|FileDownloadError msg -> 
+        //  //Console.WriteLine $"FileDownloadError exception for {downloadFile.TargetFileName} with message: {msg}"
+        //  raise (FileDownloadError msg)
+        //  return downloadFile
+        |_ as e -> 
+          let msg = $"Download error message: {e.Message} for {downloadFile.TargetFileName}"
+          raise (FileDownloadError msg)
+          return downloadFile }
 
     let downloadFileTaskAsyncWithProgress line downloadFile (spec:DownloadPlan) = async {
       try 
@@ -456,7 +472,7 @@ module GamesDownloader =
         if fileInfo.Length = downloadFile.ExpectedSize then
             None        
         else
-          let desc = sprintf "File failed verification: current size=%s,  expected size=%s" (formatFileSize fileInfo.Length ) (formatFileSize downloadFile.ExpectedSize )
+          let desc = sprintf "%s failed verification: current size=%s,  expected size=%s" fileInfo.Name (formatFileSize fileInfo.Length ) (formatFileSize downloadFile.ExpectedSize )
           let failedFile = { downloadFile with CurrentSize = fileInfo.Length; Desc = desc }
           Some failedFile
       else 
@@ -491,60 +507,62 @@ module GamesDownloader =
              Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
           else
             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period";
-            
-          try
-            try
-              
-              if plan.EnableProgressUpdate && Console.CursorTop > lastLineWritten then
-                lastLineWritten <- Console.CursorTop                
-              let limit = Math.Min(plan.MaxDownloads,10)
-              // create chunks of download tasks
-              let chunks = filesToDownload |> Seq.chunkBySize limit
-              for chunk in chunks do
-                let sessionStart = Stopwatch.GetTimestamp()
-                let msg = sprintf "Downloading a chunk of %d files at a time - this will take some time..." (chunk |> Seq.length)                  
-                Console.WriteLine msg                
-                let update = simpleSafeProgressUpdate ()
-                let mutable lineNr = lastLineWritten + 2 
-                let downloadTasks = List<Async<DownloadedFile>>()
-                for downloadFile in chunk do
-                  let downloadTask = 
-                    if plan.EnableProgressUpdate then
-                      writeEmptyLine()
-                      lineNr <- lineNr + 1
-                      downloadFileTaskAsyncWithProgress lineNr downloadFile plan 
-                    else
-                      downloadFileTaskAsync downloadFile plan
-                      //downloadFileTaskAsyncWithProgressUpdate downloadFile plan update
-                  downloadTasks.Add(downloadTask)
+          
+          try              
+            if plan.EnableProgressUpdate && Console.CursorTop > lastLineWritten then
+              lastLineWritten <- Console.CursorTop                
+            let limit = Math.Min(plan.MaxDownloads,10)
+            // create chunks of download tasks
+            let chunks = filesToDownload |> Seq.chunkBySize limit
+            for chunk in chunks do
+              let sessionStart = Stopwatch.GetTimestamp()
+              let msg = sprintf "Downloading a chunk of %d files at a time - this will take some time..." (chunk |> Seq.length)                  
+              Console.WriteLine msg                
+              let update = simpleSafeProgressUpdate ()
+              let mutable lineNr = lastLineWritten + 2 
+              let downloadTasks = List<Async<DownloadedFile>>()
+              for downloadFile in chunk do
+                let downloadTask = 
+                  if plan.EnableProgressUpdate then
+                    writeEmptyLine()
+                    lineNr <- lineNr + 1
+                    downloadFileTaskAsyncWithProgress lineNr downloadFile plan 
+                  else
+                    downloadFileTaskAsync downloadFile plan
+                    //downloadFileTaskAsyncWithProgressUpdate downloadFile plan update
+                downloadTasks.Add(downloadTask)
                 
-                //run all downloads in parallel
-                let! _ =
-                    downloadTasks 
-                    |> Async.Parallel
+              //run all downloads in parallel
+              let! _ =
+                  downloadTasks 
+                  |> Async.Parallel
                 
-                if plan.EnableProgressUpdate && lastLineWritten > Console.CursorTop then
-                  Console.CursorTop <- lastLineWritten
+              if plan.EnableProgressUpdate && lastLineWritten > Console.CursorTop then
+                Console.CursorTop <- lastLineWritten
 
-                let ts = Stopwatch.GetElapsedTime(sessionStart)
+              let ts = Stopwatch.GetElapsedTime(sessionStart)
+              if plan.EnableProgressUpdate then
                 Console.Write Environment.NewLine
-                //Console.WriteLine "*************************************"
-                let msg = sprintf "Downloaded %d files (in chunk) %.1f minutes and %d seconds" (chunk |> Seq.length) ts.TotalMinutes ts.Seconds
-                Console.WriteLine msg
-              
-              let ts = Stopwatch.GetElapsedTime(start)
-              let msg = sprintf "Downloaded %d files in %f minutes and %d seconds" (filesToDownload.Length) ts.TotalMinutes ts.Seconds
+              //Console.WriteLine "*************************************"
+              let msg = sprintf "Downloaded %d files (in chunk) %.1f minutes and %d seconds" (chunk |> Seq.length) ts.TotalMinutes ts.Seconds
               Console.WriteLine msg
+              Console.Write Environment.NewLine
+              
+            let ts = Stopwatch.GetElapsedTime(start)
+            let msg = sprintf "Downloaded in total %d files in %f minutes and %d seconds - will verify next" (filesToDownload.Length) ts.TotalMinutes ts.Seconds
+            Console.Write Environment.NewLine
+            Console.WriteLine msg
 
-            with 
-            | :? OperationCanceledException as e  ->
-              // Handle the cancellation exception
-              failwith $"Download cancelled: {e.Message}"
-            | ex ->
-              // Handle any other exception
+          with 
+          | :? OperationCanceledException as e  ->
+            // Handle the cancellation exception            
+            Console.WriteLine $"Download cancelled: {e.Message}"
+          | FileDownloadError msg -> 
+            Console.WriteLine $"Download error: {msg}"
+          | ex ->
+            // Handle any other exception
+              Console.WriteLine("Failed in chunk download")
               failwith $"Download failed: {ex.Message}" 
-          finally
-            () //plan.CTS.Dispose()
         }
 
    

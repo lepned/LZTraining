@@ -8,16 +8,44 @@ open System.Text.Json
 
 let defaultPlan =  
   {
-    StartDate = DateTime(2022,11,1)
-    DurationInDays = 30
+    StartDate = DateTime(2022,11,01)
+    DurationInDays = 1
     Url = "https://storage.lczero.org/files/training_data/test80"
     TargetDir= "E:\LZGames\T80"
     MaxDownloads = 10 // max number of downloads is limited to 10
     AutomaticRetries = true
-    AllowToDeleteFailedFiles = false
+    AllowToDeleteFailedFiles = true
     EnableProgressUpdate = false
     CTS = new CancellationTokenSource()
   }
+
+let continueDownload (invalidFiles: DownloadedFile array) (plan:DownloadPlan) =
+  if invalidFiles.Length = 0 then
+    false
+  else
+    printfn "Total number of oversized files = %d:" invalidFiles.Length
+    for file in invalidFiles do
+      printfn "%s" file.Desc
+    if plan.AllowToDeleteFailedFiles then
+      for file in invalidFiles do
+        FileInfo(file.TargetFileName).Delete()
+      printfn "All oversized files got deleted"
+      true
+    else
+      printfn "Press [R] to remove all oversized files and restart the download. [Any other key] to end the program."                            
+      let keyInfo = Console.ReadKey()
+      if keyInfo.Key = ConsoleKey.R then
+        printfn "Press [Enter] to confirm operation"
+        let confirmation = Console.ReadKey()
+        if confirmation.Key = ConsoleKey.Enter then
+          for file in invalidFiles do
+            FileInfo(file.TargetFileName).Delete()
+          printfn "All files deleted. Download will restart for oversized files"
+          true
+        else
+          false
+      else 
+        false
 
 let verify plan =
   printfn "Verification started..."
@@ -43,16 +71,22 @@ let downloadVerificationLoop plan =
       try
         tries <- tries + 1
         let! resumedFiles = collectAllFilesThatNeedToBeResumed plan
+        let (invalidFiles, normalFiles) = resumedFiles |> Array.partition (fun f -> f.CurrentSize > f.ExpectedSize)
         let! newFiles = collectAllNewFiles plan
-        let sum = resumedFiles.Length + newFiles.Length
+        let sum = normalFiles.Length + newFiles.Length
         let tmpFiles = ResizeArray<DownloadedFile>()
-        tmpFiles.AddRange resumedFiles
+        tmpFiles.AddRange normalFiles //resumedFiles
         tmpFiles.AddRange newFiles
-        let filesToDownload = tmpFiles |> Seq.toArray
-        printfn "Total number of files to download = %d" sum
+        let filesToDownload = tmpFiles |> Seq.toArray |> Array.sortBy(fun e -> e.ExpectedSize)
+        let totalSize = filesToDownload |> Array.sumBy(fun e -> e.ExpectedSize)
+        Console.Write Environment.NewLine
+        printfn "Total number of files to download = %d (size = %s), number of failed files = %d" sum (formatFileSize totalSize) invalidFiles.Length
         if sum = 0 then
-          return true
-        else if tries > 5 then
+          if continueDownload invalidFiles plan then
+            return! loop ()
+          else
+            return false
+        else if tries > 500 then
           return false
         else 
           do! downloadFilesInChunks filesToDownload plan
@@ -69,7 +103,6 @@ let readDownloadPlan path =
   let json = File.ReadAllText(path)
   JsonSerializer.Deserialize<DownloadPlan>(json)
 
-
 let startProgram plan =
   Console.WriteLine("\nMake sure to review the download plan before proceeding...")
   let planDesc = sprintf "%A" plan
@@ -77,9 +110,9 @@ let startProgram plan =
   
   let mutable cont = true  
   while cont do
-    Console.WriteLine("\nPress C key to download missing files")
-    Console.WriteLine("Press V key to verify downloads including a summary")
-    Console.WriteLine("Press Esc key to stop program\n")
+    Console.WriteLine("\nPress [C] key to download missing files")
+    Console.WriteLine("Press [V] key to verify downloads including a summary")
+    Console.WriteLine("Press [Esc] key to stop program\n")
     let keyInfo = Console.ReadKey(true)
     if keyInfo.Key = ConsoleKey.C then
       printfn "Press a key to confirm downloads"
@@ -88,7 +121,7 @@ let startProgram plan =
       if resultMessage then
         printfn "All files for the given plan successfully downloaded"
       else
-        printfn "Errors occured during download"
+        printfn "Errors occured during download session"
     if keyInfo.Key = ConsoleKey.V then
       verify plan
     if keyInfo.Key = ConsoleKey.Escape then
@@ -109,7 +142,8 @@ let main args =
     let planFromFile =
       if fileInfo.Exists then
         let jsonPlan = readDownloadPlan arg1
-        let jsonPlan = {jsonPlan with CTS = new CancellationTokenSource() }
+        //progress update is not fully working yet
+        let jsonPlan = { jsonPlan with EnableProgressUpdate = false; CTS = new CancellationTokenSource() }
         startProgram jsonPlan
       else
         startProgram defaultPlan
