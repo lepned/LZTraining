@@ -1,7 +1,7 @@
-# LZTraining
-Download training data from Leela Chess Zero. This is a console-based application for downloading training data from storage.lczero.org. 
+# LZTraining - A cross platform solution for downloading training data from Leela Chess Zero
+Download training data from Leela Chess Zero with ease. This console-based application is designed for downloading training data from storage.lczero.org and runs on Windows, Mac, and Linux operating systems. 
 
-Download plan is a model class that is used for defining the various settings needed for downloading the training data. The configuration/download plan is defined in a json-file like this:
+Configure your download plan by defining the various settings needed for downloading the training data. The configuration/download plan is defined in a json-file like this:
 ```
 {
   "StartDate": "2022-11-01",

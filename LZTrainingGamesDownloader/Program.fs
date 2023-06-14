@@ -5,19 +5,25 @@ open LC0Training.GamesDownloader
 open System.Text.Json
 
 //Download training data from LC0
+let readDownloadPlan path =
+  let json = File.ReadAllText(path)
+  JsonSerializer.Deserialize<DownloadPlan>(json)
 
-let defaultPlan =  
-  {
-    StartDate = DateTime(2023,06,01)
-    DurationInDays = 10
-    Url = "https://storage.lczero.org/files/training_data/test80"
-    TargetDir= "E:\LZGames\Debug"
-    MaxDownloads = 10 // max number of downloads is limited to 10
-    AutomaticRetries = true
-    AllowToDeleteFailedFiles = false
-    EnableProgressUpdate = true
-    CTS = new CancellationTokenSource()
-  }
+let defaultPlan = 
+  let folder = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName
+  let path = Path.Combine(folder,"Downloadplan.json")
+  readDownloadPlan path
+
+//let defaultPlan =  
+//  {
+//    StartDate = DateTime(2022,12,01)
+//    DurationInDays = 6
+//    Url = "https://storage.lczero.org/files/training_data/test80"
+//    TargetDir= "E:\LZGames\Debug"
+//    MaxDownloads = 12 // max number of downloads is limited to 10
+//    AutomaticRetries = true
+//    AllowToDeleteFailedFiles = false
+//  }
 
 let continueDownload (invalidFiles: DownloadedFile array) (plan:DownloadPlan) =
   if invalidFiles.Length = 0 then
@@ -57,7 +63,7 @@ let verify plan =
   if passed then 
     printfn "Verification passed" 
   else 
-    printfn "Verification failed - look at your bin dir for summary"
+    printfn "Verification failed - look at your bin dir for summary file"
     let list = ResizeArray<DownloadedFile>()
     let failedResumedFiles = collectAllFilesThatNeedToBeResumed plan |> Async.RunSynchronously
     let newFiles = collectAllNewFiles plan |> Async.RunSynchronously
@@ -65,7 +71,7 @@ let verify plan =
     list.AddRange newFiles
     printfn "Number of files that need to be downloaded=%d" list.Count
     for file in list do
-      let msg = sprintf "File: %s Expected=%d OnDisk=%d" file.TargetFileName file.ExpectedSize file.CurrentSize
+      let msg = sprintf "File: %s Expected=%d OnDisk=%d" file.Name file.ExpectedSize file.CurrentSize
       printfn "%s" msg
 
 
@@ -104,10 +110,6 @@ let downloadVerificationLoop plan =
         failwith $"Program failed to proceed: {e.Message}"
         return false   }
     loop ()
-
-let readDownloadPlan path =
-  let json = File.ReadAllText(path)
-  JsonSerializer.Deserialize<DownloadPlan>(json)
 
 let startProgram plan =
   Console.WriteLine("\nMake sure to review the download plan before proceeding...")
@@ -152,10 +154,8 @@ let main args =
     let planFromFile =
       if fileInfo.Exists then
         let jsonPlan = readDownloadPlan arg1
-        //progress update is not fully working yet
-        let jsonPlan = { jsonPlan with EnableProgressUpdate = false; CTS = new CancellationTokenSource() }
         startProgram jsonPlan
-      else
+      else        
         startProgram defaultPlan
     printfn "Received args=%s: %A" arg1 planFromFile
 
