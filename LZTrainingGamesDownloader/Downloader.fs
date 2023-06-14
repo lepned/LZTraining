@@ -9,13 +9,17 @@ open System.Threading.Tasks
 open System.Diagnostics
 open System.Text.RegularExpressions
 open System.Net.Http.Headers
+open Spectre.Console
 
 module GamesDownloader =
     // Define a custom exception type with a string argument
     exception FileDownloadError of string
+    
+    exception OversizedFileError of string
 
     type DownloadedFile = { FileURL : string; TargetFileName : string; ExpectedSize : int64; CurrentSize: int64; Desc: string }
       with
+        member this.Name = FileInfo(this.TargetFileName).Name
         static member Empty = {FileURL = ""; TargetFileName = ""; ExpectedSize = 0L; CurrentSize = 0L; Desc= "Empty"}
     
     type DownloadPlan = 
@@ -33,6 +37,25 @@ module GamesDownloader =
     
     let rnd = Random()
     let consoleLock = obj()
+
+    let startProgressUpdate = 
+      let settings = AnsiConsoleSettings()
+      let console = AnsiConsole.Create(settings)
+      let prog = console.Progress()
+      let columns : ProgressColumn array =
+        [|
+          TaskDescriptionColumn()
+          ProgressBarColumn()
+          PercentageColumn()
+          RemainingTimeColumn()
+          TransferSpeedColumn()
+          //SpinnerColumn()
+        |]
+      prog.Columns(columns)
+
+      //prog
+
+
 
     // Keep track of the last line written
     let mutable lastLineWritten = 0
@@ -306,78 +329,155 @@ module GamesDownloader =
         with
         |_ as e -> failwith $"Download error for: {e.Message} "; return downloadFile }
 
-    let downloadFileTaskAsyncWithProgressUpdate downloadFile (plan:DownloadPlan) update = async {
-      try 
-        use client =  new HttpClient()
-        let startTime = Stopwatch.GetTimestamp()
-        use request = new HttpRequestMessage(HttpMethod.Get, downloadFile.FileURL)
-        let fileInfo = new FileInfo(downloadFile.TargetFileName)
-        if fileInfo.Exists then
-            if fileInfo.Length > downloadFile.ExpectedSize then
-              failwith $"{fileInfo.Name} - file size bigger than expected (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"                  
-            request.Headers.Range <- RangeHeaderValue(fileInfo.Length, Nullable())
+    //let downloadFileTaskAsyncWithProgressUpdate downloadFile (plan:DownloadPlan) update = async {
+    //  try 
+    //    use client =  new HttpClient()
+    //    let startTime = Stopwatch.GetTimestamp()
+    //    use request = new HttpRequestMessage(HttpMethod.Get, downloadFile.FileURL)
+    //    let fileInfo = new FileInfo(downloadFile.TargetFileName)
+    //    if fileInfo.Exists then
+    //        if fileInfo.Length > downloadFile.ExpectedSize then
+    //          failwith $"{fileInfo.Name} - file size bigger than expected (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"                  
+    //        request.Headers.Range <- RangeHeaderValue(fileInfo.Length, Nullable())
 
-        use! response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, plan.CTS.Token) |> Async.AwaitTask
-        let totalBytes = response.Content.Headers.ContentLength
-        let sizeLeftToDownload = if totalBytes.HasValue then totalBytes.Value else 0
-        let sizeOnDisk = if fileInfo.Exists then fileInfo.Length else 0
-        let sum = sizeLeftToDownload + sizeOnDisk
-        if downloadFile.ExpectedSize <> sum then
-          if sizeOnDisk > downloadFile.ExpectedSize then
-            let! size = getFileSizeFromUrl client downloadFile        
-            if sizeOnDisk > size then          
-              failwith $"Something wrong with the file {downloadFile.TargetFileName} - consider deleting the file and rerun"
+    //    use! response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, plan.CTS.Token) |> Async.AwaitTask
+    //    let totalBytes = response.Content.Headers.ContentLength
+    //    let sizeLeftToDownload = if totalBytes.HasValue then totalBytes.Value else 0
+    //    let sizeOnDisk = if fileInfo.Exists then fileInfo.Length else 0
+    //    let sum = sizeLeftToDownload + sizeOnDisk
+    //    if downloadFile.ExpectedSize <> sum then
+    //      if sizeOnDisk > downloadFile.ExpectedSize then
+    //        let! size = getFileSizeFromUrl client downloadFile        
+    //        if sizeOnDisk > size then          
+    //          failwith $"Something wrong with the file {downloadFile.TargetFileName} - consider deleting the file and rerun"
         
-        // Check if the response is successful 
-        if response.IsSuccessStatusCode then
-          if not totalBytes.HasValue then           
-            failwith $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"
+    //    // Check if the response is successful 
+    //    if response.IsSuccessStatusCode then
+    //      if not totalBytes.HasValue then           
+    //        failwith $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})"
           
-          // Get the http response content stream asynchronously 
-          use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
+    //      // Get the http response content stream asynchronously 
+    //      use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
 
-          // Create a file stream to save the content stream 
-          use fileStream = 
-            if fileInfo.Exists then 
-                File.Open(downloadFile.TargetFileName, FileMode.Append) 
-            else 
-              File.Create(downloadFile.TargetFileName)
+    //      // Create a file stream to save the content stream 
+    //      use fileStream = 
+    //        if fileInfo.Exists then 
+    //            File.Open(downloadFile.TargetFileName, FileMode.Append) 
+    //        else 
+    //          File.Create(downloadFile.TargetFileName)
 
-          let fileInfo = new FileInfo(downloadFile.TargetFileName)          
-          let buffer = Array.zeroCreate<byte> 2048 
-          let mutable finished = false
-          let bytesSofar = if fileInfo.Exists then fileInfo.Length else 0L
-          let mutable totalBytesRead = bytesSofar
-          let totalSize = formatFileSize downloadFile.ExpectedSize
-          let mutable updateCounter = 0
+    //      let fileInfo = new FileInfo(downloadFile.TargetFileName)          
+    //      let buffer = Array.zeroCreate<byte> 2048 
+    //      let mutable finished = false
+    //      let bytesSofar = if fileInfo.Exists then fileInfo.Length else 0L
+    //      let mutable totalBytesRead = bytesSofar
+    //      let totalSize = formatFileSize downloadFile.ExpectedSize
+    //      let mutable updateCounter = 0
           
-          let sendProgress() =
-            let dur = Stopwatch.GetElapsedTime startTime
-            let time = formatTimeSpan dur
-            let fileSizeRead = formatFileSize totalBytesRead
-            let percentage = (float totalBytesRead / float downloadFile.ExpectedSize) * 100.
-            let kbps = (float (totalBytesRead-bytesSofar) / 1024.) / dur.TotalSeconds
-            let msg = sprintf "\r%s - Downloaded %s of %s (%.2f%%) in %s kbps=%.0f          " fileInfo.Name fileSizeRead totalSize percentage time kbps
-            let line : int = update downloadFile msg
-            line
+    //      let sendProgress() =
+    //        let dur = Stopwatch.GetElapsedTime startTime
+    //        let time = formatTimeSpan dur
+    //        let fileSizeRead = formatFileSize totalBytesRead
+    //        let percentage = (float totalBytesRead / float downloadFile.ExpectedSize) * 100.
+    //        let kbps = (float (totalBytesRead-bytesSofar) / 1024.) / dur.TotalSeconds
+    //        let msg = sprintf "\r%s - Downloaded %s of %s (%.2f%%) in %s kbps=%.0f          " fileInfo.Name fileSizeRead totalSize percentage time kbps
+    //        let line : int = update downloadFile msg
+    //        line
 
-          while not finished do
-            updateCounter <- updateCounter + 1
-            let bytesRead = contentStream.Read (buffer, 0, buffer.Length)
-            if bytesRead = 0 then 
-              let line = sendProgress()
-              //Console.SetCursorPosition(0, line)
-              finished <- true
-            else
-              fileStream.Write (buffer, 0, bytesRead)
-              totalBytesRead <- totalBytesRead + int64 bytesRead
-            if updateCounter % 100 = 1 then
-              sendProgress() |> ignore
+    //      while not finished do
+    //        updateCounter <- updateCounter + 1
+    //        let bytesRead = contentStream.Read (buffer, 0, buffer.Length)
+    //        if bytesRead = 0 then 
+    //          let line = sendProgress()
+    //          //Console.SetCursorPosition(0, line)
+    //          finished <- true
+    //        else
+    //          fileStream.Write (buffer, 0, bytesRead)
+    //          totalBytesRead <- totalBytesRead + int64 bytesRead
+    //        if updateCounter % 100 = 1 then
+    //          sendProgress() |> ignore
           
-        return downloadFile
+    //    return downloadFile
       
-        with
-        |_ as e -> failwith $"Download error for: {e.Message} "; return downloadFile }
+    //    with
+    //    |_ as e -> failwith $"Download error for: {e.Message} "; return downloadFile }
+
+    let downloadFileTaskAsyncWithProgressUpdate downloadFile (plan:DownloadPlan) (pTask:ProgressTask) : Async<Result<_,_>> = async {
+      try 
+        try    
+          use client =  new HttpClient()
+          let startTime = Stopwatch.GetTimestamp()
+          use request = new HttpRequestMessage(HttpMethod.Get, downloadFile.FileURL)
+          let fileInfo = new FileInfo(downloadFile.TargetFileName)
+          if fileInfo.Exists then
+              if fileInfo.Length > downloadFile.ExpectedSize then
+                raise (OversizedFileError $"{fileInfo.Name} cancelled: file size bigger than expected (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})")                 
+              request.Headers.Range <- RangeHeaderValue(fileInfo.Length, Nullable())
+
+          use! response = client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, plan.CTS.Token) |> Async.AwaitTask
+          let totalBytes = response.Content.Headers.ContentLength
+          let sizeLeftToDownload = if totalBytes.HasValue then totalBytes.Value else 0
+          let sizeOnDisk = if fileInfo.Exists then fileInfo.Length else 0
+          let sum = sizeLeftToDownload + sizeOnDisk
+          if downloadFile.ExpectedSize <> sum then
+            if sizeOnDisk > downloadFile.ExpectedSize then
+              let! size = getFileSizeFromUrl client downloadFile        
+              if sizeOnDisk > size then          
+                raise (OversizedFileError $"{fileInfo.Name} - file size bigger than expected (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})")                 
+        
+          // Check if the response is successful 
+          if response.IsSuccessStatusCode then
+            if not totalBytes.HasValue then           
+              raise (FileDownloadError $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})")
+          
+            // Get the http response content stream asynchronously 
+            use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
+
+            // Create a file stream to save the content stream 
+            use fileStream = 
+              if fileInfo.Exists then 
+                  File.Open(downloadFile.TargetFileName, FileMode.Append) 
+              else 
+                File.Create(downloadFile.TargetFileName)
+          
+            pTask.StartTask()
+            let fileInfo = new FileInfo(downloadFile.TargetFileName)          
+            let buffer = Array.zeroCreate<byte> 2048 
+            let mutable finished = false
+            let startBytes = fileStream.Length //if fileInfo.Exists then fileInfo.Length else 0L
+            let mutable totalBytesRead = startBytes
+            //let totalSize = formatFileSize downloadFile.ExpectedSize
+            let mutable updateCounter = 0
+          
+            while not finished do
+              updateCounter <- updateCounter + 1
+              let bytesRead = contentStream.Read (buffer, 0, buffer.Length)
+              if bytesRead = 0 then
+                pTask.Value <- float fileStream.Length
+                do! Async.Sleep 1000
+                pTask.StopTask()
+                finished <- true
+              else
+                fileStream.Write (buffer, 0, bytesRead)
+                totalBytesRead <- totalBytesRead + int64 bytesRead
+              if updateCounter % 1000 = 1 then
+                if fileStream.Length > downloadFile.ExpectedSize then
+                  raise (OversizedFileError $"{fileInfo.Name} - File oversized")
+                //let percentage = (float fileStream.Length / float downloadFile.ExpectedSize) * 100.
+                //pTask.MaxValue <- 100.
+                pTask.Value <- float fileStream.Length // (fileStream.Length - startBytes)
+                pTask.MaxValue <- float downloadFile.ExpectedSize //(downloadFile.ExpectedSize - startBytes)
+            
+            return Result.Ok downloadFile
+          else
+            return Result.Error $"Failed to start download with the following status code: {response.StatusCode}" 
+                
+          with
+          |OversizedFileError msg -> return Result.Error $"{msg}" //Console.WriteLine(msg)
+          |FileDownloadError msg -> return Result.Error $"{msg}" //Console.WriteLine($"{downloadFile.TargetFileName} download error: {msg}")
+          |ex -> return Result.Error $"{ex.Message}" // raise ex
+      finally
+        pTask.StopTask()   }
 
 
     let getFileUrlAndTargetFn (line:string) url targetDir =
@@ -504,7 +604,7 @@ module GamesDownloader =
         async {
           let filesToDownload = newFiles         
           if plan.MaxDownloads < filesToDownload.Length then
-             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks of {plan.MaxDownloads} files per session";
+             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks upto {plan.MaxDownloads} files per session";
           else
             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period";
           
@@ -515,45 +615,49 @@ module GamesDownloader =
             // create chunks of download tasks
             let chunks = filesToDownload |> Seq.chunkBySize limit
             for chunk in chunks do
-              let sessionStart = Stopwatch.GetTimestamp()
-              let msg = sprintf "Downloading a chunk of %d files at a time - this will take some time..." (chunk |> Seq.length)                  
-              Console.WriteLine msg                
-              let update = simpleSafeProgressUpdate ()
-              let mutable lineNr = lastLineWritten + 2 
-              let downloadTasks = List<Async<DownloadedFile>>()
-              for downloadFile in chunk do
-                let downloadTask = 
-                  if plan.EnableProgressUpdate then
-                    writeEmptyLine()
-                    lineNr <- lineNr + 1
-                    downloadFileTaskAsyncWithProgress lineNr downloadFile plan 
-                  else
-                    downloadFileTaskAsync downloadFile plan
-                    //downloadFileTaskAsyncWithProgressUpdate downloadFile plan update
-                downloadTasks.Add(downloadTask)
+              let sessionStart = Stopwatch.GetTimestamp()              
+              let pTask = startProgressUpdate.StartAsync(fun ctx -> 
+                let tasks = ResizeArray<Async<Result<_,_>>>()  
+                for downloadFile in chunk do
+                  let size = formatFileSize downloadFile.ExpectedSize
+                  let task = ctx.AddTask($"[green]{downloadFile.Name} ({size})[/]")
+                  let asynctask = downloadFileTaskAsyncWithProgressUpdate downloadFile plan task
+                  tasks.Add asynctask
+                task {return! tasks |> Async.Parallel  } )
                 
-              //run all downloads in parallel
-              let! _ =
-                  downloadTasks 
-                  |> Async.Parallel
-                
-              if plan.EnableProgressUpdate && lastLineWritten > Console.CursorTop then
-                Console.CursorTop <- lastLineWritten
-
-              let ts = Stopwatch.GetElapsedTime(sessionStart)
-              if plan.EnableProgressUpdate then
-                Console.Write Environment.NewLine
-              //Console.WriteLine "*************************************"
-              let msg = sprintf "Downloaded %d files (in chunk) %.1f minutes and %d seconds" (chunk |> Seq.length) ts.TotalMinutes ts.Seconds
-              Console.WriteLine msg
-              Console.Write Environment.NewLine
+              let! results = pTask |> Async.AwaitTask
               
-            let ts = Stopwatch.GetElapsedTime(start)
+              let resultOption =
+                results
+                |>Array.tryFind (fun e -> 
+                    match e with 
+                    |Ok _ -> false 
+                    |Error _ -> true)
+              match resultOption with
+              |None -> () //printfn $"{Environment.NewLine}All files sucessfully downloaded"
+              |Some r ->
+                match r with
+                |Error error -> printfn $"{Environment.NewLine}Error in download: {error}"
+                |_ -> ()               
+                
+              //if plan.EnableProgressUpdate && lastLineWritten > Console.CursorTop then
+              //  Console.CursorTop <- lastLineWritten
+
+              let ts = Stopwatch.GetElapsedTime(sessionStart)              
+              Console.Write Environment.NewLine
+              let msg = sprintf "Downloaded %d files (in chunk) %.1f minutes" (chunk |> Seq.length) ts.TotalMinutes
+              Console.WriteLine msg
+              
+            let ts = Stopwatch.GetElapsedTime(start)            
             let msg = sprintf "Downloaded in total %d files in %f minutes and %d seconds - will verify next" (filesToDownload.Length) ts.TotalMinutes ts.Seconds
             Console.Write Environment.NewLine
             Console.WriteLine msg
 
           with 
+          | :? InvalidOperationException as e -> 
+            Console.WriteLine($"Invalid operation {e.Message}")
+          | :? HttpRequestException as e ->
+            Console.WriteLine $"Http request failure: {e.Message}"
           | :? OperationCanceledException as e  ->
             // Handle the cancellation exception            
             Console.WriteLine $"Download cancelled: {e.Message}"
@@ -561,8 +665,7 @@ module GamesDownloader =
             Console.WriteLine $"Download error: {msg}"
           | ex ->
             // Handle any other exception
-              Console.WriteLine("Failed in chunk download")
-              failwith $"Download failed: {ex.Message}" 
+              failwith $"Program failed in download: {ex.Message}" 
         }
 
    

@@ -8,19 +8,21 @@ open System.Text.Json
 
 let defaultPlan =  
   {
-    StartDate = DateTime(2022,11,01)
-    DurationInDays = 1
+    StartDate = DateTime(2023,06,01)
+    DurationInDays = 10
     Url = "https://storage.lczero.org/files/training_data/test80"
-    TargetDir= "E:\LZGames\T80"
+    TargetDir= "E:\LZGames\Debug"
     MaxDownloads = 10 // max number of downloads is limited to 10
     AutomaticRetries = true
-    AllowToDeleteFailedFiles = true
-    EnableProgressUpdate = false
+    AllowToDeleteFailedFiles = false
+    EnableProgressUpdate = true
     CTS = new CancellationTokenSource()
   }
 
 let continueDownload (invalidFiles: DownloadedFile array) (plan:DownloadPlan) =
   if invalidFiles.Length = 0 then
+    Console.Write Environment.NewLine
+    printfn "All files for the given plan successfully downloaded"
     false
   else
     printfn "Total number of oversized files = %d:" invalidFiles.Length
@@ -32,15 +34,17 @@ let continueDownload (invalidFiles: DownloadedFile array) (plan:DownloadPlan) =
       printfn "All oversized files got deleted"
       true
     else
-      printfn "Press [R] to remove all oversized files and restart the download. [Any other key] to end the program."                            
-      let keyInfo = Console.ReadKey()
-      if keyInfo.Key = ConsoleKey.R then
-        printfn "Press [Enter] to confirm operation"
+      Console.Write Environment.NewLine
+      printfn "Press [R] to remove all oversized files and restart the download. [Any other key] ends the download."                            
+      let removeKey = Console.ReadKey()
+      if removeKey.Key = ConsoleKey.R then
+        Console.Write Environment.NewLine
+        printfn "Press [Enter] to confirm operation. [Any other key] ends the download."
         let confirmation = Console.ReadKey()
         if confirmation.Key = ConsoleKey.Enter then
           for file in invalidFiles do
             FileInfo(file.TargetFileName).Delete()
-          printfn "All files deleted. Download will restart for oversized files"
+          printfn "All oversized files deleted. Download will restart..."
           true
         else
           false
@@ -75,18 +79,20 @@ let downloadVerificationLoop plan =
         let! newFiles = collectAllNewFiles plan
         let sum = normalFiles.Length + newFiles.Length
         let tmpFiles = ResizeArray<DownloadedFile>()
+        //remember to remove this line after debugging
+        //tmpFiles.AddRange invalidFiles
         tmpFiles.AddRange normalFiles //resumedFiles
         tmpFiles.AddRange newFiles
         let filesToDownload = tmpFiles |> Seq.toArray |> Array.sortBy(fun e -> e.ExpectedSize)
         let totalSize = filesToDownload |> Array.sumBy(fun e -> e.ExpectedSize)
         Console.Write Environment.NewLine
-        printfn "Total number of files to download = %d (size = %s), number of failed files = %d" sum (formatFileSize totalSize) invalidFiles.Length
+        printfn "Total number of files to download = %d (size = %s) (number of failed files = %d)" sum (formatFileSize totalSize) invalidFiles.Length
         if sum = 0 then
           if continueDownload invalidFiles plan then
             return! loop ()
           else
             return false
-        else if tries > 500 then
+        else if tries > 100 then
           return false
         else 
           do! downloadFilesInChunks filesToDownload plan
@@ -95,7 +101,7 @@ let downloadVerificationLoop plan =
         
       with
       |_ as e -> 
-        failwith $"Error in file downloading: {e.Message}"
+        failwith $"Program failed to proceed: {e.Message}"
         return false   }
     loop ()
 
@@ -112,16 +118,20 @@ let startProgram plan =
   while cont do
     Console.WriteLine("\nPress [C] key to download missing files")
     Console.WriteLine("Press [V] key to verify downloads including a summary")
-    Console.WriteLine("Press [Esc] key to stop program\n")
+    Console.WriteLine("Press [Esc] key to stop program")
     let keyInfo = Console.ReadKey(true)
     if keyInfo.Key = ConsoleKey.C then
-      printfn "Press a key to confirm downloads"
-      let _ = Console.ReadKey()
-      let resultMessage = downloadVerificationLoop plan |> Async.RunSynchronously
-      if resultMessage then
-        printfn "All files for the given plan successfully downloaded"
+      Console.Write Environment.NewLine
+      printfn "Press [Enter] key to confirm downloads. [Any other key] ends the download."
+      let keyPressed = Console.ReadKey()
+      if keyPressed.Key = ConsoleKey.Enter then
+        let continueDownload = downloadVerificationLoop plan |> Async.RunSynchronously
+        if continueDownload then
+          Console.Write Environment.NewLine
+          printfn "You have unresolved invalid files for the download period"
+        
       else
-        printfn "Errors occured during download session"
+        cont <- false
     if keyInfo.Key = ConsoleKey.V then
       verify plan
     if keyInfo.Key = ConsoleKey.Escape then

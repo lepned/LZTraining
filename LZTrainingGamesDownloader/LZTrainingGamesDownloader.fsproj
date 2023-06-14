@@ -1,16 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net7.0</TargetFramework>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Content Include="Downloadplan.json" />
-    <Compile Include="Downloader.fs" />
-    <Compile Include="Program.fs" />
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Downloadplan.json" />
+		<Compile Include="Downloader.fs" />
+		<Compile Include="Program.fs" />
+	</ItemGroup>
 
-  <ItemGroup />
+	<ItemGroup >
+		<PackageReference Include="Spectre.Console.Cli" Version="0.47.0" />
+	</ItemGroup>
 
 </Project>
