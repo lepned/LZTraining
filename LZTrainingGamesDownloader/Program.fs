@@ -5,25 +5,27 @@ open LC0Training.GamesDownloader
 open System.Text.Json
 
 //Download training data from LC0
+
 let readDownloadPlan path =
   let json = File.ReadAllText(path)
   JsonSerializer.Deserialize<DownloadPlan>(json)
 
 let defaultPlan = 
-  let folder = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName
+  let folder = Environment.CurrentDirectory  
   let path = Path.Combine(folder,"Downloadplan.json")
-  readDownloadPlan path
-
-//let defaultPlan =  
-//  {
-//    StartDate = DateTime(2022,12,01)
-//    DurationInDays = 6
-//    Url = "https://storage.lczero.org/files/training_data/test80"
-//    TargetDir= "E:\LZGames\Debug"
-//    MaxDownloads = 12 // max number of downloads is limited to 10
-//    AutomaticRetries = true
-//    AllowToDeleteFailedFiles = false
-//  }
+  let fileInfo = FileInfo(path)
+  if fileInfo.Exists then
+    readDownloadPlan path
+  else 
+    {
+      StartDate = DateTime(2022,12,01)
+      DurationInDays = 6
+      Url = "https://storage.lczero.org/files/training_data/test80"
+      TargetDir= "E:\LZGames\Debug"
+      MaxDownloads = 18 // max number of downloads is limited to 10
+      AutomaticRetries = true
+      AllowToDeleteFailedFiles = false
+    }
 
 let continueDownload (invalidFiles: DownloadedFile array) (plan:DownloadPlan) =
   if invalidFiles.Length = 0 then
