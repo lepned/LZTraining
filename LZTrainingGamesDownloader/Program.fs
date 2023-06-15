@@ -10,6 +10,12 @@ let readDownloadPlan path =
   let json = File.ReadAllText(path)
   JsonSerializer.Deserialize<DownloadPlan>(json)
 
+let otherDirs = 
+  [
+    "D:\LZGames\T80"
+    "E:\LZGames\T80"
+  ]
+
 let defaultPlan = 
   let folder = Environment.CurrentDirectory  
   let path = Path.Combine(folder,"Downloadplan.json")
@@ -18,11 +24,12 @@ let defaultPlan =
     readDownloadPlan path
   else 
     {
-      StartDate = DateTime(2022,12,01)
-      DurationInDays = 6
+      StartDate = DateTime(2022,10,01)
+      DurationInDays = 5
       Url = "https://storage.lczero.org/files/training_data/test80"
       TargetDir= "E:\LZGames\Debug"
-      MaxDownloads = 18 // max number of downloads is limited to 10
+      //OtherDirs = otherDirs
+      MaxDownloads = 10 // max number of downloads is limited to 10
       AutomaticRetries = true
       AllowToDeleteFailedFiles = false
     }
@@ -71,9 +78,9 @@ let verify plan =
     let newFiles = collectAllNewFiles plan |> Async.RunSynchronously
     list.AddRange failedResumedFiles
     list.AddRange newFiles
-    printfn "Number of files that need to be downloaded=%d" list.Count
+    printfn "Number of files to download = %d" list.Count
     for file in list do
-      let msg = sprintf "File: %s Expected=%d OnDisk=%d" file.Name file.ExpectedSize file.CurrentSize
+      let msg = sprintf "File: %s Expected = %d OnDisk = %d" file.Name file.ExpectedSize file.CurrentSize
       printfn "%s" msg
 
 
@@ -104,7 +111,7 @@ let downloadVerificationLoop plan =
           return false
         else 
           do! downloadFilesInChunks filesToDownload plan
-          do! Async.Sleep(10000)
+          do! Async.Sleep(5000)
           return! loop () 
         
       with

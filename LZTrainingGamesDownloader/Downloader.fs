@@ -29,6 +29,7 @@ module GamesDownloader =
         DurationInDays: int
         Url: string
         TargetDir: string
+        //OtherDirs: string list
         MaxDownloads: int
         AutomaticRetries: bool
         AllowToDeleteFailedFiles : bool
@@ -96,28 +97,35 @@ module GamesDownloader =
       let percentage = float totalBytesRead / float contentLength * 100.0
       printfn "Downloaded %A%%" percentage
 
-    let downloadMainFileAsync (url:string) = async {
+    let downloadMainFileAsync (url:string) : Async<Result<_,_>> = async {
       try 
         use client =  new HttpClient()
         use! response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead) |> Async.AwaitTask
         
         // Check if the response is successful 
         if response.IsSuccessStatusCode then
-          
           // Get the http response content stream asynchronously 
           use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
 
           // Create a file stream to save the content stream 
           use fileStream = File.Create("training.htm")
-
+          
           // Copy the content stream to the file stream asynchronously 
-          do! contentStream.CopyToAsync(fileStream) |> Async.AwaitTask            
-         
+          do! contentStream.CopyToAsync(fileStream) |> Async.AwaitTask
+          
+          if fileStream.Length > 0 then
+            return Result.Ok "Main training file downloaded"
+          else
+            return Result.Error "Error in downloading main training file"         
         else
-          printfn "Main file could not be downloaded - check URL and retry later"
+          return Result.Error "Error in downloading main training file"
+          //printfn "Main file could not be downloaded - check URL and retry later"
       
       with
-      |_ as e -> printfn "Download file error: %s" e.Message  }    
+      |_ -> 
+        //printfn "Download file error: %s" e.Message 
+        return Result.Error "Error in downloading main training file"
+        }    
 
     let getFileSizeFromUrl (client:HttpClient) (downloadFile:DownloadedFile) = async {
       use! response = client.GetAsync(downloadFile.FileURL, HttpCompletionOption.ResponseHeadersRead) |> Async.AwaitTask
@@ -151,7 +159,7 @@ module GamesDownloader =
           // Check if the response is successful 
           if response.IsSuccessStatusCode then
             if not totalBytes.HasValue then           
-              raise (FileDownloadError $"{fileInfo.Name} - download request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})")
+              raise (FileDownloadError $"{fileInfo.Name} - Http request returns 0 bytes (current={downloadFile.CurrentSize} expected={downloadFile.ExpectedSize})")
           
             // Get the http response content stream asynchronously 
             use! contentStream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
@@ -165,7 +173,7 @@ module GamesDownloader =
           
             pTask.StartTask()
             let fileInfo = new FileInfo(downloadFile.TargetFileName)          
-            let buffer = Array.zeroCreate<byte> 2048 
+            let buffer = Array.zeroCreate<byte> (1024 * 4) 
             let mutable finished = false
             let startBytes = fileStream.Length //if fileInfo.Exists then fileInfo.Length else 0L
             let mutable totalBytesRead = startBytes
@@ -187,23 +195,24 @@ module GamesDownloader =
                 totalBytesRead <- totalBytesRead + int64 bytesRead
               if updateCounter % 1000 = 1 then
                 if fileStream.Length > downloadFile.ExpectedSize then
-                  raise (OversizedFileError $"{fileInfo.Name} - File oversized")
-                //let percentage = (float fileStream.Length / float downloadFile.ExpectedSize) * 100.
-                //pTask.MaxValue <- 100.
+                  raise (OversizedFileError $"{fileInfo.Name} - File oversized")                
                 pTask.Value <- float fileStream.Length // (fileStream.Length - startBytes)
                 pTask.MaxValue <- float downloadFile.ExpectedSize //(downloadFile.ExpectedSize - startBytes)
+                //debugging error handling
+                //if rnd.Next(10) > 6 then
+                //  failwith $"{downloadFile.Name} File download error with failwith"
+                //else 
+                //  raise (OversizedFileError $"{downloadFile.Name} Oversized file detected...")
             
             return Result.Ok downloadFile
           else
-            return Result.Error $"Failed to start download with the following status code: {response.StatusCode}" 
+            return Result.Error $"{downloadFile.Name} Failed to start download with status code: {response.StatusCode}" 
                 
           with
-          |OversizedFileError msg -> return Result.Error $"{msg}" //Console.WriteLine(msg)
-          |FileDownloadError msg -> return Result.Error $"{msg}" //Console.WriteLine($"{downloadFile.TargetFileName} download error: {msg}")
-          |ex -> 
-            if cts.Token.CanBeCanceled then
-              cts.Cancel()
-            return Result.Error $"{ex.Message}"
+          |OversizedFileError msg -> return Result.Error $"{msg}" 
+          |FileDownloadError msg -> return Result.Error $"{msg}" 
+          |ex ->
+            return Result.Error $"{downloadFile.Name} - {ex.Message}"
       finally
         pTask.StopTask()   }
 
@@ -225,25 +234,25 @@ module GamesDownloader =
     
 
     let rec getFileUrlAndTargetFnList (plan : DownloadPlan) =
-      async {
-          try
-              do! downloadMainFileAsync plan.Url
-              let matchList = createDateMatchStringList plan
-              let urlAndFn = 
-                File.ReadAllLines "training.htm"
-                |> Array.filter(fun line -> matchList |> List.exists(fun e -> line.Contains e))
-                |> Array.map(fun line -> getFileUrlAndTargetFn line plan.Url plan.TargetDir)
-
-              return urlAndFn
-          with
-          | _ as e ->
-              printfn "Download file error: %s" e.Message
-              do! Async.Sleep 1000
-              if plan.AutomaticRetries then
-                  return! getFileUrlAndTargetFnList plan
-              else
-                  return [||]
-      }
+      
+      async {          
+        let! result = downloadMainFileAsync plan.Url
+        match result with
+        |Error msg -> 
+          if plan.AutomaticRetries then
+            printfn "%s - will retry download after 10 seconds" msg
+            do! Async.Sleep 10000
+            return! getFileUrlAndTargetFnList plan
+          else
+            return [||]
+        |Ok _ -> 
+          let matchList = createDateMatchStringList plan
+          let urlAndFn = 
+            File.ReadAllLines "training.htm"
+            |> Array.filter(fun line -> matchList |> List.exists(fun e -> line.Contains e))
+            |> Array.map(fun line -> getFileUrlAndTargetFn line plan.Url plan.TargetDir)
+          return urlAndFn  
+          }
     
     let createVerificationSummary plan (name:string option) =      
       let periodStart = plan.StartDate.ToString("yyyyMMdd")
@@ -294,8 +303,8 @@ module GamesDownloader =
         printfn "Done with checking file sizes for all files"  }
 
     //File might already exists. Checking if it matches expected size..."
-    let inspectFile (downloadFile:DownloadedFile)  =
-      let fileInfo = new FileInfo(downloadFile.TargetFileName)        
+    let inspectFile (plan : DownloadPlan) (downloadFile : DownloadedFile)  =
+      let fileInfo = new FileInfo(downloadFile.TargetFileName)
       if fileInfo.Exists then
         if fileInfo.Length = downloadFile.ExpectedSize then
             None        
@@ -311,7 +320,7 @@ module GamesDownloader =
         let! filesToDownload = getFileUrlAndTargetFnList plan 
         let filtered = 
           filesToDownload 
-          |> Array.map inspectFile
+          |> Array.map (inspectFile plan)
           |> Array.choose id
         return filtered
       finally () }
@@ -328,8 +337,8 @@ module GamesDownloader =
    
     let downloadFilesInChunks (newFiles: DownloadedFile array) (plan:DownloadPlan) =
         System.Console.CursorVisible <- false
-        let start = Stopwatch.GetTimestamp()
         let cts = new CancellationTokenSource()
+        let start = Stopwatch.GetTimestamp()
         async {
           let filesToDownload = newFiles         
           if plan.MaxDownloads < filesToDownload.Length then
@@ -353,22 +362,15 @@ module GamesDownloader =
                 
               let! results = pTask |> Async.AwaitTask
               
-              //debugging
+              //print all download errors to console
               let errors = results |> Array.sumBy(fun e -> match e with |Error _ -> 1 |_ -> 0)
-              printfn "%s" (sprintf "Number of errors in download = %d" errors)
-              do! Async.Sleep 10000
-              let resultOption =
-                results
-                |>Array.tryFind (fun e -> 
-                    match e with 
-                    |Ok _ -> false 
-                    |Error _ -> true)
-              match resultOption with
-              |None -> printfn $"{Environment.NewLine}All files sucessfully downloaded"
-              |Some r ->
-                match r with
-                |Error error -> printfn $"{Environment.NewLine}Error in download: {error}"
-                |_ -> () 
+              if errors > 0 then
+                printfn "%s" (sprintf "Number of errors in download = %d" errors)
+                Console.Write Environment.NewLine
+                for result in results do
+                  match result with
+                  |Error msg -> printfn "Error: %s" msg
+                  |Ok file -> ()
 
               let ts = Stopwatch.GetElapsedTime(sessionStart)              
               Console.Write Environment.NewLine
