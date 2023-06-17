@@ -2,7 +2,9 @@
 Download training data from Leela Chess Zero with ease. This console-based application is designed for downloading training data from storage.lczero.org and runs on Windows, Mac, and Linux operating systems. 
 It will automatically download the training data and save it to a specified directory on your computer. It also supports automatic retries and verification of downloaded files.
 
-![alt text](demo.png)
+Screenshot of the program running:
+
+![alt text](Demo.png)
 
 
 Configure your download plan by defining the various settings needed for downloading the training data. The configuration/download plan is defined in a json-file like this:
