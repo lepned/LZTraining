@@ -1,26 +1,30 @@
-# LZTraining - A cross platform solution for downloading training data from Leela Chess Zero
+# LZTraining - A simple cross platform solution for downloading training data from Leela Chess Zero
 Download training data from Leela Chess Zero with ease. This console-based application is designed for downloading training data from storage.lczero.org and runs on Windows, Mac, and Linux operating systems. 
 It will automatically download the training data and save it to a specified directory on your computer. It also supports automatic retries and verification of downloaded files.
+
+![alt text](demo.png)
+
 
 Configure your download plan by defining the various settings needed for downloading the training data. The configuration/download plan is defined in a json-file like this:
 ```
 {
-  "StartDate": "2022-11-01",
-  "DurationInDays": 5,
+  "StartDate": "2023-05-01",
+  "DurationInDays": 1,
   "Url": "https://storage.lczero.org/files/training_data/test80",
   "TargetDir": "E:/LZGames/T80",
-  "MaxDownloads": 10,
+  "MaxDownloads": 5,
   "AutomaticRetries": true,
   "AllowToDeleteFailedFiles": false
 }
 ```
-StartDate: This represents the start date of the downloads to fetch. It is of type DateTime.
-DurationInDays: This represents the duration in days for collecting files to be downloaded.
-Url: This represents the URL of the resource to be downloaded. This is fixed and should not be changed.
-TargetDir: This represents the target directory where the downloaded files will be saved on your computer.
-MaxDownloads: This represents the maximum number of concurrent downloads (max limit is set to 10).
-AutomaticRetries: This represents a boolean value indicating whether or not failed downloads should be retried.
-AllowToDeleteFailedFiles: This represents a boolean value indicating whether or not failed downloads should be deleted.
+- StartDate: The start date of the downloads to fetch
+- DurationInDays: The duration/period in days for collecting files to download
+- Url: The source url of the training data/files to download. This is fixed and should not be changed
+- TargetDir: The destination directory where the files are saved
+- MaxDownloads: The maximum number of concurrent downloads per session. 10 is the current limit
+- AutomaticRetries: Whether to retry failed downloads automatically
+- AllowToDeleteFailedFiles: Whether to delete partially downloaded or invalid files
+
 
 The configuration plan is used by the application to define the above settings. Once the configuration plan is set up, it can be used to download the training data. 
 
