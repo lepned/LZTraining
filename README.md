@@ -20,7 +20,7 @@ Configure your download plan by defining the various settings needed for downloa
 }
 ```
 - StartDate: The start date of the downloads to fetch
-- DurationInDays: The duration/period in days for collecting files to download
+- DurationInDays: The duration/period in days for collecting files to download from storage
 - Url: The source url of the training data/files to download. This is fixed and should not be changed
 - TargetDir: The destination directory where the files are saved
 - MaxDownloads: The maximum number of concurrent downloads per session. 10 is the current limit
