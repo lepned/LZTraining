@@ -35,6 +35,8 @@ jobs:
       run: |
         mkdir -p ./artifacts
         zip -r ./artifacts/${{ matrix.os }}-release.zip ./output
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.os }}-release
