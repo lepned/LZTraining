@@ -15,7 +15,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
@@ -42,7 +42,7 @@ jobs:
     needs: build
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Download Windows artifacts
       uses: actions/download-artifact@v2
@@ -96,4 +96,3 @@ jobs:
         asset_path: ./macos
         asset_name: macos-release.zip
         asset_content_type: application/zip
-
