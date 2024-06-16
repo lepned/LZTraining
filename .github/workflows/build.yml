@@ -21,10 +21,10 @@ jobs:
         dotnet-version: '8.x.x'
 
     - name: Restore dependencies
-      run: dotnet restore LZTrainingGamesDownloader/LZTraining.csproj
+      run: dotnet restore LZTraining.sln
 
     - name: Build
-      run: dotnet build LZTrainingGamesDownloader/LZTraining.csproj --configuration Release --no-restore
+      run: dotnet build LZTraining.sln --configuration Release --no-restore
 
     - name: Publish
-      run: dotnet publish LZTrainingGamesDownloader/LZTraining.csproj --configuration Release --no-build --output ./output
+      run: dotnet publish LZTrainingGamesDownloader/LZTrainingGamesDownloader.fsproj --configuration Release --no-build --output ./output
