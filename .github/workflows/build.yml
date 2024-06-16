@@ -96,3 +96,4 @@ jobs:
         asset_path: ./macos
         asset_name: macos-release.zip
         asset_content_type: application/zip
+
