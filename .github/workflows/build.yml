@@ -31,16 +31,22 @@ jobs:
     - name: Publish
       run: dotnet publish LZTrainingGamesDownloader/LZTrainingGamesDownloader.fsproj --configuration Release --no-build --output ./output
 
+    - name: List output directory (before archiving)
+      run: ls -R ./output
+
     - name: Archive artifacts
       run: |
-        mkdir -p ./artifacts
-        zip -r ./artifacts/${{ matrix.os }}-release.zip ./output
+        mkdir -p artifacts
+        zip -r artifacts/${{ matrix.os }}-release.zip ./output
+
+    - name: List artifacts directory
+      run: ls -R artifacts
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: ${{ matrix.os }}-release
-        path: ./artifacts/${{ matrix.os }}-release.zip
+        path: artifacts/${{ matrix.os }}-release.zip
 
   release:
     runs-on: ubuntu-latest
@@ -53,19 +59,22 @@ jobs:
       uses: actions/download-artifact@v2
       with:
         name: windows-latest-release
-        path: ./artifacts
+        path: artifacts
 
     - name: Download Linux artifacts
       uses: actions/download-artifact@v2
       with:
         name: ubuntu-latest-release
-        path: ./artifacts
+        path: artifacts
 
     - name: Download macOS artifacts
       uses: actions/download-artifact@v2
       with:
         name: macos-latest-release
-        path: ./artifacts
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: ls -R artifacts
 
     - name: Create Release
       id: create_release
@@ -82,7 +91,7 @@ jobs:
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/windows-latest-release.zip
+        asset_path: artifacts/windows-latest-release.zip
         asset_name: windows-release.zip
         asset_content_type: application/zip
 
@@ -90,7 +99,7 @@ jobs:
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/ubuntu-latest-release.zip
+        asset_path: artifacts/ubuntu-latest-release.zip
         asset_name: linux-release.zip
         asset_content_type: application/zip
 
@@ -98,6 +107,6 @@ jobs:
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/macos-latest-release.zip
+        asset_path: artifacts/macos-latest-release.zip
         asset_name: macos-release.zip
         asset_content_type: application/zip
