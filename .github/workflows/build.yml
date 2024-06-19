@@ -1,0 +1,112 @@
+name: Build and Release .NET Application
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x.x'
+
+    - name: Restore dependencies
+      run: dotnet restore LZTraining.sln
+
+    - name: Build
+      run: dotnet build LZTraining.sln --configuration Release --no-restore
+
+    - name: Publish
+      run: dotnet publish LZTrainingGamesDownloader/LZTrainingGamesDownloader.fsproj --configuration Release --no-build --output ./output
+
+    - name: List output directory (before archiving)
+      run: ls -R ./output
+
+    - name: Archive artifacts
+      run: |
+        mkdir -p artifacts
+        zip -r artifacts/${{ matrix.os }}-release.zip ./output
+
+    - name: List artifacts directory
+      run: ls -R artifacts
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ matrix.os }}-release
+        path: artifacts/${{ matrix.os }}-release.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: windows-latest-release
+        path: ./artifacts
+
+    - name: Download Linux artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: ubuntu-latest-release
+        path: ./artifacts
+
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: macos-latest-release
+        path: ./artifacts
+
+    - name: List downloaded artifacts
+      run: ls -R ./artifacts
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Windows release
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/windows-latest-release.zip
+        asset_name: windows-release.zip
+        asset_content_type: application/zip
+
+    - name: Upload Linux release
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/ubuntu-latest-release.zip
+        asset_name: linux-release.zip
+        asset_content_type: application/zip
+
+    - name: Upload macOS release
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/macos-latest-release.zip
+        asset_name: macos-release.zip
+        asset_content_type: application/zip
