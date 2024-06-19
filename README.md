@@ -10,20 +10,22 @@ Screenshot of the program running:
 Configure your download plan by defining the various settings needed for downloading the training data. The configuration/download plan is defined in a json-file like this:
 ```
 {
-  "StartDate": "2023-05-01",
-  "DurationInDays": 1,
+  "StartDate": "2024-05-01",
+  "NumDaysForward": 20,
   "Url": "https://storage.lczero.org/files/training_data/test80",
-  "TargetDir": "E:/LZGames/T80",
-  "MaxDownloads": 5,
-  "AutomaticRetries": true,
-  "AllowToDeleteFailedFiles": false
+  "TargetDir": "D:/LZGames/T80",
+  "OtherDirs": [ ],
+  "MaxConcurrentDownloads": 5,
+  "AllowToDeleteFailedFiles": false,
+  "AutomaticRetries": true
 }
 ```
 - StartDate: The start date of the downloads to fetch
-- DurationInDays: The duration or period in days for collecting files to download from storage
+- NumDaysForward: The duration or period in days for collecting files to download. To collect files back in time use minus days.
 - Url: The source url of the training data/files to download. This is fixed and should not be changed
 - TargetDir: The destination directory where the files are saved
-- MaxDownloads: The maximum number of concurrent downloads per session. 10 is the current limit
+- OtherDirs: List of directories where you save training data files
+- MaxConcurrentDownloads: The maximum number of concurrent downloads per session. 10 is the current limit
 - AutomaticRetries: Whether to retry failed downloads automatically
 - AllowToDeleteFailedFiles: Whether to delete partially downloaded or invalid files
 
