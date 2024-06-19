@@ -11,8 +11,7 @@ let readDownloadPlan path =
   JsonSerializer.Deserialize<DownloadPlan>(json)
 
 let otherDirs = 
-  [
-    "D:\LZGames\T80"
+  [    
     "E:\LZGames\T80"
   ]
 
@@ -24,12 +23,12 @@ let defaultPlan =
     readDownloadPlan path
   else 
     {
-      StartDate = DateTime(2022,10,01)
-      DurationInDays = 5
+      StartDate = DateTime(2024,5,01)
+      NumDaysForward = -20
       Url = "https://storage.lczero.org/files/training_data/test80"
-      TargetDir= "E:\LZGames\Debug"
-      //OtherDirs = otherDirs
-      MaxDownloads = 10 // max number of downloads is limited to 10
+      TargetDir= "D:\LZGames\T80"
+      OtherDirs = otherDirs
+      MaxConcurrentDownloads = 10 // max number of downloads is limited to 10
       AutomaticRetries = true
       AllowToDeleteFailedFiles = false
     }
@@ -152,8 +151,12 @@ let startProgram plan =
 
 [<EntryPoint>]
 let main args =
-  
-  //for debugging at the moment
+  //for debugging only
+  //let drives = getVolumDisks()
+  //for d in drives do
+  //  printfn "TotalSpace: %s Free: %s" (formatFileSize d.TotalSize) (formatFileSize d.TotalFreeSpace)
+  //let t = drives.Length
+
   match args with
   |[||] -> 
     startProgram defaultPlan

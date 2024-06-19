@@ -26,17 +26,23 @@ module GamesDownloader =
     type DownloadPlan = 
       {
         StartDate: DateTime
-        DurationInDays: int
+        NumDaysForward: int
         Url: string
         TargetDir: string
-        //OtherDirs: string list
-        MaxDownloads: int
+        OtherDirs: string list
+        MaxConcurrentDownloads: int
         AutomaticRetries: bool
         AllowToDeleteFailedFiles : bool
       }
     
     let rnd = Random()
-    let consoleLock = obj()
+    
+    let getVolumDisks() =
+      //let driveInfo = DriveInfo("D")
+      //let totalSize = driveInfo.TotalSize
+      //let freeSize = driveInfo.TotalFreeSpace
+      let allDrives = DriveInfo.GetDrives()
+      allDrives
 
     let startProgressUpdate = 
       let settings = AnsiConsoleSettings()
@@ -179,6 +185,8 @@ module GamesDownloader =
             let mutable totalBytesRead = startBytes
             //let totalSize = formatFileSize downloadFile.ExpectedSize
             let mutable updateCounter = 0
+            let mutable checkPoint = 0L
+            let mutable firstAttempt = true
           
             while not finished do
               if cts.Token.IsCancellationRequested then
@@ -193,18 +201,33 @@ module GamesDownloader =
               else
                 fileStream.Write (buffer, 0, bytesRead)
                 totalBytesRead <- totalBytesRead + int64 bytesRead
-              if updateCounter % 1000 = 1 then
-                if fileStream.Length > downloadFile.ExpectedSize then
-                  raise (OversizedFileError $"{fileInfo.Name} - File oversized")                
-                pTask.Value <- float fileStream.Length // (fileStream.Length - startBytes)
-                pTask.MaxValue <- float downloadFile.ExpectedSize //(downloadFile.ExpectedSize - startBytes)
+                if updateCounter % 1000 = 1 then
+                  if fileStream.Length > downloadFile.ExpectedSize then
+                    raise (OversizedFileError $"{fileInfo.Name} - File oversized")                
+                  pTask.Value <- float fileStream.Length // (fileStream.Length - startBytes)
+                  pTask.MaxValue <- float downloadFile.ExpectedSize //(downloadFile.ExpectedSize - startBytes)
+                if updateCounter % 30000 = 1 then                  
+                  let diff = fileStream.Length - checkPoint
+                  //check if at least 1 MB has been downloaded since last check point
+                  if firstAttempt then
+                    firstAttempt <- false
+                    checkPoint <- fileStream.Length
+                  elif diff > (1024L*1024L) then
+                    //printfn "Checkpoint set for %s improved in fraction %d" (downloadFile.Name) diff
+                    checkPoint <- fileStream.Length 
+                  else //no progress or very slow download so better to cancel
+                    raise (FileDownloadError $"{fileInfo.Name} - File got stuck or too slow to download") 
+                  //reportProgress totalBytesRead downloadFile.ExpectedSize
                 //debugging error handling
                 //if rnd.Next(10) > 6 then
                 //  failwith $"{downloadFile.Name} File download error with failwith"
                 //else 
                 //  raise (OversizedFileError $"{downloadFile.Name} Oversized file detected...")
             
-            return Result.Ok downloadFile
+            if cts.Token.IsCancellationRequested then
+              return Result.Error $"{downloadFile.Name} Failed because of no progress after: {(float checkPoint / float downloadFile.CurrentSize):P1} downloaded"
+            else
+              return Result.Ok downloadFile
           else
             return Result.Error $"{downloadFile.Name} Failed to start download with status code: {response.StatusCode}" 
                 
@@ -228,7 +251,8 @@ module GamesDownloader =
 
     let createDateMatchStringList plan =
       let startDate = plan.StartDate
-      let endDate = startDate + TimeSpan.FromDays(plan.DurationInDays)
+      let endDate = startDate + TimeSpan.FromDays(plan.NumDaysForward)
+      let startDate, endDate = if startDate < endDate then startDate, endDate else endDate, startDate
       let days = (endDate - startDate).Days
       [ for d in 0..days-1 -> startDate.AddDays(float d).ToString("yyyyMMdd") ]
     
@@ -256,7 +280,7 @@ module GamesDownloader =
     
     let createVerificationSummary plan (name:string option) =      
       let periodStart = plan.StartDate.ToString("yyyyMMdd")
-      let periodEnd = (plan.StartDate + TimeSpan.FromDays(plan.DurationInDays)).ToString("yyyyMMdd")
+      let periodEnd = (plan.StartDate + TimeSpan.FromDays(plan.NumDaysForward)).ToString("yyyyMMdd")
       let fileName = sprintf "File_summary_From_%s_To_%s" periodStart periodEnd
       let fileName = defaultArg name fileName
       let files = getFileUrlAndTargetFnList plan |> Async.RunSynchronously
@@ -304,16 +328,21 @@ module GamesDownloader =
 
     //File might already exists. Checking if it matches expected size..."
     let inspectFile (plan : DownloadPlan) (downloadFile : DownloadedFile)  =
-      let fileInfo = new FileInfo(downloadFile.TargetFileName)
-      if fileInfo.Exists then
-        if fileInfo.Length = downloadFile.ExpectedSize then
+      let fileInfo = FileInfo(downloadFile.TargetFileName)
+      let otherFileInfoLocations =
+        plan.OtherDirs 
+        |> List.map (fun e -> Path.Combine(e, downloadFile.Name) |> FileInfo)
+      let allLocs = fileInfo :: otherFileInfoLocations
+      let tryFind = allLocs |> List.tryFind (fun file -> file.Exists)
+      match tryFind with
+      |Some info ->      
+        if info.Length = downloadFile.ExpectedSize then
             None        
         else
           let desc = sprintf "%s failed verification: current size=%s,  expected size=%s" fileInfo.Name (formatFileSize fileInfo.Length ) (formatFileSize downloadFile.ExpectedSize )
-          let failedFile = { downloadFile with CurrentSize = fileInfo.Length; Desc = desc }
+          let failedFile = { downloadFile with TargetFileName = info.FullName; CurrentSize = fileInfo.Length; Desc = desc }
           Some failedFile
-      else 
-        None    
+      |_ -> None     
     
     let collectAllFilesThatNeedToBeResumed (plan : DownloadPlan) = async {      
       try 
@@ -341,14 +370,14 @@ module GamesDownloader =
         let start = Stopwatch.GetTimestamp()
         async {
           let filesToDownload = newFiles         
-          if plan.MaxDownloads < filesToDownload.Length then
-             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks upto {plan.MaxDownloads} files per session";
+          if plan.MaxConcurrentDownloads < filesToDownload.Length then
+             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period, will download in chunks upto {plan.MaxConcurrentDownloads} files per session";
           else
             Console.WriteLine $"Got {filesToDownload.Length} files to download for the specified period";
           
           try      
             // create chunks of download tasks
-            let chunks = filesToDownload |> Seq.chunkBySize plan.MaxDownloads
+            let chunks = filesToDownload |> Seq.chunkBySize plan.MaxConcurrentDownloads
             for chunk in chunks do
               let sessionStart = Stopwatch.GetTimestamp()              
               let pTask = startProgressUpdate.StartAsync(fun ctx -> 
