@@ -119,33 +119,40 @@ let downloadVerificationLoop plan =
         return false   }
     loop ()
 
-let startProgram plan =
+let startProgram plan autoStart =
   Console.WriteLine("\nMake sure to review the download plan before proceeding...")
   let planDesc = sprintf "%A" plan
   Console.WriteLine($"\nCurrent download plan in use:\n{planDesc}")
   
   let mutable cont = true  
   while cont do
-    Console.WriteLine("\nPress [C] key to download missing files")
-    Console.WriteLine("Press [V] key to verify downloads including a summary")
-    Console.WriteLine("Press [Esc] key to stop program")
-    let keyInfo = Console.ReadKey(true)
-    if keyInfo.Key = ConsoleKey.C then
-      Console.Write Environment.NewLine
-      printfn "Press [Enter] key to confirm downloads. [Any other key] ends the download."
-      let keyPressed = Console.ReadKey()
-      if keyPressed.Key = ConsoleKey.Enter then
-        let continueDownload = downloadVerificationLoop plan |> Async.RunSynchronously
-        if continueDownload then
-          Console.Write Environment.NewLine
-          printfn "You have unresolved invalid files for the download period"
-        
-      else
-        cont <- false
-    if keyInfo.Key = ConsoleKey.V then
-      verify plan
-    if keyInfo.Key = ConsoleKey.Escape then
+    if autoStart then
+      let continueDownload = downloadVerificationLoop plan |> Async.RunSynchronously
+      if continueDownload then
+        Console.Write Environment.NewLine
+        printfn "You have unresolved invalid files for the download period"
       cont <- false
+    else
+      Console.WriteLine("\nPress [C] key to download missing files")
+      Console.WriteLine("Press [V] key to verify downloads including a summary")
+      Console.WriteLine("Press [Esc] key to stop program")
+      let keyInfo = Console.ReadKey(true)
+      if keyInfo.Key = ConsoleKey.C then
+        Console.Write Environment.NewLine
+        printfn "Press [Enter] key to confirm downloads. [Any other key] ends the download."
+        let keyPressed = Console.ReadKey()
+        if keyPressed.Key = ConsoleKey.Enter then
+          let continueDownload = downloadVerificationLoop plan |> Async.RunSynchronously
+          if continueDownload then
+            Console.Write Environment.NewLine
+            printfn "You have unresolved invalid files for the download period"
+        
+        else
+          cont <- false
+      if keyInfo.Key = ConsoleKey.V then
+        verify plan
+      if keyInfo.Key = ConsoleKey.Escape then
+        cont <- false
 
   printfn "Application ended"
 
@@ -159,21 +166,37 @@ let main args =
 
   match args with
   |[||] -> 
-    startProgram defaultPlan
+    startProgram defaultPlan false
   |[|arg1|] -> 
-    Console.WriteLine($"Received args={arg1}") 
+    printfn $"Received args={arg1}"
     let fileInfo = FileInfo(arg1)
+
     let planFromFile =
       if fileInfo.Exists then
         let jsonPlan = readDownloadPlan arg1
-        startProgram jsonPlan
+        startProgram jsonPlan false
       else        
-        startProgram defaultPlan
+        let autoStart = arg1.ToLower().Trim() = "autostart"
+        if autoStart then
+          startProgram defaultPlan true
+        else
+          startProgram defaultPlan false
     printfn "Received args=%s: %A" arg1 planFromFile
 
-  |[|arg1;arg2|] -> printfn "args: %s %s" arg1 arg2
-  |_ -> printfn "Too many args provided"
-  
+  |[|arg1;arg2|] -> 
+    let fileInfo = FileInfo(arg1)
+    let planFromFile = if fileInfo.Exists then readDownloadPlan arg1 |> Some else None
+    match planFromFile, arg2.ToLower().Trim() with
+    |Some plan, "autostart" ->       
+      startProgram plan true
+    |Some plan, _ -> 
+      startProgram plan false
+    |None, _ -> 
+      printfn "Plan file not found"
+      //startProgram defaultPlan false
+    printfn "Received args=%s: %A" arg1 planFromFile
+    
+  |_ -> printfn "Too many args provided"  
     
   // Return 0 to indicate success
   0

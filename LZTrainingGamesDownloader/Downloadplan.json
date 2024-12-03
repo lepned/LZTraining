@@ -1,10 +1,10 @@
 ﻿{
-  "StartDate": "2024-05-01",
-  "NumDaysForward": -20,
+  "StartDate": "2024-10-01",
+  "NumDaysForward": 20,
   "Url": "https://storage.lczero.org/files/training_data/test80",
   "TargetDir": "D:/LZGames/T80",
   "OtherDirs": [ ],
-  "MaxConcurrentDownloads": 10,
+  "MaxConcurrentDownloads": 5,
   "AllowToDeleteFailedFiles": false,
   "AutomaticRetries": true
 }
